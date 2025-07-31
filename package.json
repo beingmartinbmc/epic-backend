@@ -1,0 +1,26 @@
+{
+  "name": "epic-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Epic Religious Guidance Application",
+  "main": "api/openai-proxy.js",
+  "keywords": [
+    "api",
+    "backend",
+    "vercel",
+    "openai",
+    "mongodb"
+  ],
+  "author": "beingmartinbmc",
+  "license": "MIT",
+  "dependencies": {
+    "mongodb": "^6.3.0"
+  },
+  "devDependencies": {
+    "vercel": "^44.6.3"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod",
+    "start": "vercel dev"
+  }
+}
