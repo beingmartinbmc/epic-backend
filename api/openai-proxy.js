@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   // Handle CORS preflight
   // Dynamic CORS origin check for GitHub Pages
   const allowedOrigin = 'https://beingmartinbmc.github.io';
-  const origin = req.headers.origin;
+  const origin = req.headers.origin || "";
   const isAllowedOrigin = origin && origin.startsWith(allowedOrigin);
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', isAllowedOrigin ? origin : allowedOrigin);
