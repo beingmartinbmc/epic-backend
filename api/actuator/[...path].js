@@ -1,4 +1,4 @@
-import { connectToMongoDB } from './mongodb.js';
+import { connectToMongoDB } from '../mongodb.js';
 
 // Simple health check function
 async function checkMongoDBHealth() {
@@ -164,12 +164,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Extract the path from the request
-    const path = req.url.replace('/api/actuator', '');
+    // Get the path from the query parameters (Vercel dynamic routing)
+    const { path } = req.query;
+    const pathString = Array.isArray(path) ? path.join('/') : path || '';
     
     // Route to appropriate actuator endpoint
-    switch (path) {
-      case '/health':
+    switch (pathString) {
+      case 'health':
         const mongodbHealth = await checkMongoDBHealth();
         const appHealth = await checkApplicationHealth();
         
@@ -184,11 +185,11 @@ export default async function handler(req, res) {
         
         return res.status(200).json(healthData);
         
-      case '/metrics':
+      case 'metrics':
         const metricsData = getSystemMetrics();
         return res.status(200).json(metricsData);
         
-      case '/prometheus':
+      case 'prometheus':
         const memUsage = process.memoryUsage();
         const prometheusData = `# HELP nodejs_memory_rss_bytes Resident set size in bytes.
 # TYPE nodejs_memory_rss_bytes gauge
@@ -217,15 +218,15 @@ nodejs_process_start_time_seconds ${process.uptime()}`;
         res.setHeader('Content-Type', 'text/plain');
         return res.status(200).send(prometheusData);
         
-      case '/info':
+      case 'info':
         const infoData = getApplicationInfo();
         return res.status(200).json(infoData);
         
-      case '/env':
+      case 'env':
         const envData = getEnvironmentInfo();
         return res.status(200).json(envData);
         
-      case '/threaddump':
+      case 'threaddump':
         const threadDumpData = {
           timestamp: new Date().toISOString(),
           threads: [
@@ -239,7 +240,7 @@ nodejs_process_start_time_seconds ${process.uptime()}`;
         };
         return res.status(200).json(threadDumpData);
         
-      case '/':
+      case '':
         // Root endpoint with available links
         const rootData = {
           _links: {
@@ -273,4 +274,4 @@ nodejs_process_start_time_seconds ${process.uptime()}`;
       message: error.message 
     });
   }
-} 
+}
