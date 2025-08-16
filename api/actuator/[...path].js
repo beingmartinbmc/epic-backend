@@ -14,8 +14,8 @@ const actuator = new LightweightActuator({
     // 🔒 SECURITY: Mask sensitive environment variables
     maskPatterns: ['PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'CREDENTIAL', 'AUTH'],
     maskCustomVariables: [
-      'MONGODB_USERNAME', 
-      'MONGODB_PASSWORD', 
+      'mongodb_username', 
+      'mongodb_password', 
       'OPENAI_API_KEY', 
       'OPENAI_TOKEN',
       'AWS_ACCESS_KEY_ID',
