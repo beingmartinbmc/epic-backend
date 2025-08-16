@@ -1,4 +1,5 @@
 import { storeConversation } from './mongodb.js';
+import { initializeActuator } from './actuator-instance.js';
 
 export default async function handler(req, res) {
   // Handle CORS preflight
@@ -21,6 +22,16 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Initialize actuator and get metric instances
+    const actuator = await initializeActuator();
+    const conversationsCounter = actuator.getCustomMetric('epic_conversations_total');
+    const responseTimeHistogram = actuator.getCustomMetric('epic_response_time_seconds');
+    
+    // Increment conversation counter
+    if (conversationsCounter) {
+      conversationsCounter.inc();
+    }
+    
     // Extract user input from the request - get the actual user message
     const messages = req.body.messages;
     const userMessage = messages.find(msg => msg.role === 'user')?.content || 'No user message found';
@@ -65,6 +76,9 @@ export default async function handler(req, res) {
       return msg;
     });
     
+    // Start timing the OpenAI API call
+    const startTime = Date.now();
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -82,6 +96,12 @@ export default async function handler(req, res) {
         stop: null // Allow full response generation
       })
     });
+    
+    // Calculate and record response time
+    const responseTime = (Date.now() - startTime) / 1000; // Convert to seconds
+    if (responseTimeHistogram) {
+      responseTimeHistogram.observe(responseTime);
+    }
 
     const data = await response.json();
     
