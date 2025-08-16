@@ -10,6 +10,21 @@ const actuator = new LightweightActuator({
   enableEnv: true,
   enableThreadDump: true,
   enableHeapDump: true,
+  envOptions: {
+    // 🔒 SECURITY: Mask sensitive environment variables
+    maskPatterns: ['PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'CREDENTIAL', 'AUTH'],
+    maskCustomVariables: [
+      'MONGODB_USERNAME', 
+      'MONGODB_PASSWORD', 
+      'OPENAI_API_KEY', 
+      'OPENAI_TOKEN',
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+      'AWS_SESSION_TOKEN'
+    ],
+    maskValue: '[HIDDEN]',
+    showMaskedCount: true
+  },
   customHealthChecks: [
     {
       name: 'mongodb',
