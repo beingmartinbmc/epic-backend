@@ -30,6 +30,9 @@ export default async function handler(req, res) {
     // Increment conversation counter
     if (conversationsCounter) {
       conversationsCounter.inc();
+      console.log('✅ Incremented epic_conversations_total');
+    } else {
+      console.log('❌ conversationsCounter not found');
     }
     
     // Extract user input from the request - get the actual user message
@@ -101,6 +104,9 @@ export default async function handler(req, res) {
     const responseTime = (Date.now() - startTime) / 1000; // Convert to seconds
     if (responseTimeHistogram) {
       responseTimeHistogram.observe(responseTime);
+      console.log(`✅ Recorded response time: ${responseTime.toFixed(3)}s`);
+    } else {
+      console.log('❌ responseTimeHistogram not found');
     }
 
     const data = await response.json();
