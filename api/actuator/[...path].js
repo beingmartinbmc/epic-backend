@@ -131,6 +131,10 @@ export default async function handler(req, res) {
     // Initialize actuator if not already done
     await actuator.start();
     
+    // Get custom metric instances for tracking
+    const conversationsCounter = actuator.getCustomMetric('epic_conversations_total');
+    const responseTimeHistogram = actuator.getCustomMetric('epic_response_time_seconds');
+    
     // Get the path from the query parameters (Vercel dynamic routing)
     // Vercel passes the dynamic route as "...path" not "path"
     const path = req.query['...path'];
@@ -139,14 +143,26 @@ export default async function handler(req, res) {
     // Route to appropriate actuator endpoint using direct data access methods
     switch (pathString) {
       case 'health':
+        // Increment conversations counter for health checks
+        if (conversationsCounter) {
+          conversationsCounter.inc();
+        }
         const health = await actuator.getHealth();
         return res.status(200).json(health);
         
       case 'metrics':
+        // Increment conversations counter for metrics requests
+        if (conversationsCounter) {
+          conversationsCounter.inc();
+        }
         const metrics = await actuator.getMetrics();
         return res.status(200).json(metrics);
         
       case 'prometheus':
+        // Increment conversations counter for prometheus requests
+        if (conversationsCounter) {
+          conversationsCounter.inc();
+        }
         const prometheus = await actuator.getPrometheusMetrics();
         res.setHeader('Content-Type', 'text/plain');
         return res.status(200).send(prometheus);
@@ -171,6 +187,29 @@ export default async function handler(req, res) {
           return res.status(405).json({ error: 'Method not allowed' });
         }
         
+      case 'test-openai':
+        // Simulate OpenAI API call with response time tracking
+        if (conversationsCounter) {
+          conversationsCounter.inc();
+        }
+        
+        const startTime = Date.now();
+        
+        // Simulate API call delay
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 500)); // 500-2500ms
+        
+        const responseTime = (Date.now() - startTime) / 1000; // Convert to seconds
+        
+        if (responseTimeHistogram) {
+          responseTimeHistogram.observe(responseTime);
+        }
+        
+        return res.status(200).json({
+          message: 'Simulated OpenAI API call completed',
+          responseTime: `${responseTime.toFixed(3)}s`,
+          timestamp: new Date().toISOString()
+        });
+        
       case '':
         // Root endpoint with available links
         const rootData = {
@@ -181,7 +220,8 @@ export default async function handler(req, res) {
             info: { href: '/api/actuator/info' },
             env: { href: '/api/actuator/env' },
             threaddump: { href: '/api/actuator/threaddump' },
-            heapdump: { href: '/api/actuator/heapdump' }
+            heapdump: { href: '/api/actuator/heapdump' },
+            'test-openai': { href: '/api/actuator/test-openai' }
           }
         };
         return res.status(200).json(rootData);
