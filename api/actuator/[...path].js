@@ -168,9 +168,15 @@ export default async function handler(req, res) {
     const { path } = req.query;
     const pathString = Array.isArray(path) ? path.join('/') : path || '';
     
+    // Debug logging
+    console.log('Request URL:', req.url);
+    console.log('Query path:', req.query.path);
+    console.log('Path string:', pathString);
+    
     // Route to appropriate actuator endpoint
     switch (pathString) {
       case 'health':
+        console.log('Handling health endpoint');
         const mongodbHealth = await checkMongoDBHealth();
         const appHealth = await checkApplicationHealth();
         
@@ -186,10 +192,12 @@ export default async function handler(req, res) {
         return res.status(200).json(healthData);
         
       case 'metrics':
+        console.log('Handling metrics endpoint');
         const metricsData = getSystemMetrics();
         return res.status(200).json(metricsData);
         
       case 'prometheus':
+        console.log('Handling prometheus endpoint');
         const memUsage = process.memoryUsage();
         const prometheusData = `# HELP nodejs_memory_rss_bytes Resident set size in bytes.
 # TYPE nodejs_memory_rss_bytes gauge
@@ -219,14 +227,17 @@ nodejs_process_start_time_seconds ${process.uptime()}`;
         return res.status(200).send(prometheusData);
         
       case 'info':
+        console.log('Handling info endpoint');
         const infoData = getApplicationInfo();
         return res.status(200).json(infoData);
         
       case 'env':
+        console.log('Handling env endpoint');
         const envData = getEnvironmentInfo();
         return res.status(200).json(envData);
         
       case 'threaddump':
+        console.log('Handling threaddump endpoint');
         const threadDumpData = {
           timestamp: new Date().toISOString(),
           threads: [
@@ -241,6 +252,7 @@ nodejs_process_start_time_seconds ${process.uptime()}`;
         return res.status(200).json(threadDumpData);
         
       case '':
+        console.log('Handling root endpoint');
         // Root endpoint with available links
         const rootData = {
           _links: {
@@ -255,8 +267,10 @@ nodejs_process_start_time_seconds ${process.uptime()}`;
         return res.status(200).json(rootData);
         
       default:
+        console.log('Handling default case for path:', pathString);
         return res.status(404).json({ 
           error: 'Endpoint not found',
+          path: pathString,
           availableEndpoints: [
             '/api/actuator/health',
             '/api/actuator/metrics',
