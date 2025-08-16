@@ -171,6 +171,7 @@ export default async function handler(req, res) {
         const safeEnv = {};
         Object.keys(env).forEach(key => {
           const lowerKey = key.toLowerCase();
+          // More comprehensive filtering
           if (!lowerKey.includes('password') && 
               !lowerKey.includes('secret') && 
               !lowerKey.includes('key') && 
@@ -180,10 +181,60 @@ export default async function handler(req, res) {
               !lowerKey.includes('mongodb_username') &&
               !lowerKey.includes('mongodb_password') &&
               !lowerKey.includes('openai_api_key') &&
-              !lowerKey.includes('openai_token')) {
+              !lowerKey.includes('openai_token') &&
+              !lowerKey.includes('aws_access_key') &&
+              !lowerKey.includes('aws_secret') &&
+              !lowerKey.includes('session_token')) {
             safeEnv[key] = env[key];
           }
         });
+        
+        // Also filter nested objects
+        if (safeEnv.processEnv) {
+          const safeProcessEnv = {};
+          Object.keys(safeEnv.processEnv).forEach(key => {
+            const lowerKey = key.toLowerCase();
+            if (!lowerKey.includes('password') && 
+                !lowerKey.includes('secret') && 
+                !lowerKey.includes('key') && 
+                !lowerKey.includes('token') && 
+                !lowerKey.includes('credential') && 
+                !lowerKey.includes('auth') &&
+                !lowerKey.includes('mongodb_username') &&
+                !lowerKey.includes('mongodb_password') &&
+                !lowerKey.includes('openai_api_key') &&
+                !lowerKey.includes('openai_token') &&
+                !lowerKey.includes('aws_access_key') &&
+                !lowerKey.includes('aws_secret') &&
+                !lowerKey.includes('session_token')) {
+              safeProcessEnv[key] = safeEnv.processEnv[key];
+            }
+          });
+          safeEnv.processEnv = safeProcessEnv;
+        }
+        
+        if (safeEnv.environment) {
+          const safeEnvironment = {};
+          Object.keys(safeEnv.environment).forEach(key => {
+            const lowerKey = key.toLowerCase();
+            if (!lowerKey.includes('password') && 
+                !lowerKey.includes('secret') && 
+                !lowerKey.includes('key') && 
+                !lowerKey.includes('token') && 
+                !lowerKey.includes('credential') && 
+                !lowerKey.includes('auth') &&
+                !lowerKey.includes('mongodb_username') &&
+                !lowerKey.includes('mongodb_password') &&
+                !lowerKey.includes('openai_api_key') &&
+                !lowerKey.includes('openai_token') &&
+                !lowerKey.includes('aws_access_key') &&
+                !lowerKey.includes('aws_secret') &&
+                !lowerKey.includes('session_token')) {
+              safeEnvironment[key] = safeEnv.environment[key];
+            }
+          });
+          safeEnv.environment = safeEnvironment;
+        }
         
         return res.status(200).json(safeEnv);
         
