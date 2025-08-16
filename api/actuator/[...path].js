@@ -10,6 +10,29 @@ const actuator = new LightweightActuator({
   enableEnv: true,
   enableThreadDump: true,
   enableHeapDump: true,
+  envOptions: {
+    // Filter out sensitive environment variables
+    excludePatterns: [
+      /password/i,
+      /secret/i,
+      /key/i,
+      /token/i,
+      /credential/i,
+      /auth/i,
+      /mongodb_username/i,
+      /mongodb_password/i,
+      /openai_api_key/i,
+      /openai_token/i
+    ],
+    // Only show safe environment variables
+    includePatterns: [
+      /node_env/i,
+      /npm_package/i,
+      /vercel/i,
+      /port/i,
+      /host/i
+    ]
+  },
   customHealthChecks: [
     {
       name: 'mongodb',
@@ -141,8 +164,28 @@ export default async function handler(req, res) {
         return res.status(200).json(info);
         
       case 'env':
+        // Custom environment endpoint with additional security
         const env = await actuator.getEnvironment();
-        return res.status(200).json(env);
+        
+        // Additional filtering for sensitive data
+        const safeEnv = {};
+        Object.keys(env).forEach(key => {
+          const lowerKey = key.toLowerCase();
+          if (!lowerKey.includes('password') && 
+              !lowerKey.includes('secret') && 
+              !lowerKey.includes('key') && 
+              !lowerKey.includes('token') && 
+              !lowerKey.includes('credential') && 
+              !lowerKey.includes('auth') &&
+              !lowerKey.includes('mongodb_username') &&
+              !lowerKey.includes('mongodb_password') &&
+              !lowerKey.includes('openai_api_key') &&
+              !lowerKey.includes('openai_token')) {
+            safeEnv[key] = env[key];
+          }
+        });
+        
+        return res.status(200).json(safeEnv);
         
       case 'threaddump':
         const threadDump = actuator.getThreadDump();
