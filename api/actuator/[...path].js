@@ -12,7 +12,7 @@ const actuator = new LightweightActuator({
   enableHeapDump: true,
   envOptions: {
     // 🔒 SECURITY: Mask sensitive environment variables
-    maskPatterns: ['PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'CREDENTIAL', 'AUTH'],
+    maskPatterns: ['PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'CREDENTIAL', 'AUTH', 'COMMIT', 'DEPLOYMENT_ID', 'ID', 'Deployment', 'id', 'deployment'],
     maskCustomVariables: [
       'mongodb_username', 
       'mongodb_password', 
