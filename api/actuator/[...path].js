@@ -1,157 +1,106 @@
+import { LightweightActuator } from 'node-actuator-lite';
 import { connectToMongoDB } from '../mongodb.js';
 
-// Simple health check function
-async function checkMongoDBHealth() {
-  try {
-    const { db } = await connectToMongoDB();
-    const adminDb = db.admin();
-    
-    // Test database connectivity
-    await adminDb.ping();
-    
-    // Get database stats
-    const stats = await db.stats();
-    
-    return {
-      status: 'UP',
-      details: {
-        database: stats.db,
-        collections: stats.collections,
-        dataSize: stats.dataSize,
-        storageSize: stats.storageSize,
-        indexes: stats.indexes
-      }
-    };
-  } catch (error) {
-    return {
-      status: 'DOWN',
-      details: {
-        error: error.message,
-        timestamp: new Date().toISOString()
-      }
-    };
-  }
-}
-
-// Application health check
-async function checkApplicationHealth() {
-  try {
-    // Check if required environment variables are set
-    const requiredEnvVars = [
-      'OPENAI_API_KEY',
-      'OPENAI_MODEL',
-      'OPENAI_TOKEN',
-      'mongodb_username',
-      'mongodb_password'
-    ];
-    
-    const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-    
-    if (missingVars.length > 0) {
-      return {
-        status: 'DOWN',
-        details: {
-          missingEnvironmentVariables: missingVars,
-          timestamp: new Date().toISOString()
+const actuator = new LightweightActuator({
+  serverless: true, // Enable serverless mode
+  enableHealth: true,
+  enableMetrics: true,
+  enablePrometheus: true,
+  enableInfo: true,
+  enableEnv: true,
+  enableThreadDump: true,
+  enableHeapDump: true,
+  customHealthChecks: [
+    {
+      name: 'mongodb',
+      check: async () => {
+        try {
+          const { db } = await connectToMongoDB();
+          const adminDb = db.admin();
+          
+          // Test database connectivity
+          await adminDb.ping();
+          
+          // Get database stats
+          const stats = await db.stats();
+          
+          return {
+            status: 'UP',
+            details: {
+              database: stats.db,
+              collections: stats.collections,
+              dataSize: stats.dataSize,
+              storageSize: stats.storageSize,
+              indexes: stats.indexes
+            }
+          };
+        } catch (error) {
+          return {
+            status: 'DOWN',
+            details: {
+              error: error.message,
+              timestamp: new Date().toISOString()
+            }
+          };
         }
-      };
+      }
+    },
+    {
+      name: 'epic-app',
+      check: async () => {
+        try {
+          // Check if required environment variables are set
+          const requiredEnvVars = [
+            'OPENAI_API_KEY',
+            'OPENAI_MODEL',
+            'OPENAI_TOKEN',
+            'mongodb_username',
+            'mongodb_password'
+          ];
+          
+          const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+          
+          if (missingVars.length > 0) {
+            return {
+              status: 'DOWN',
+              details: {
+                missingEnvironmentVariables: missingVars,
+                timestamp: new Date().toISOString()
+              }
+            };
+          }
+          
+          return {
+            status: 'UP',
+            details: {
+              version: '1.0.0',
+              environment: process.env.NODE_ENV || 'development',
+              timestamp: new Date().toISOString()
+            }
+          };
+        } catch (error) {
+          return {
+            status: 'DOWN',
+            details: {
+              error: error.message,
+              timestamp: new Date().toISOString()
+            }
+          };
+        }
+      }
     }
-    
-    return {
-      status: 'UP',
-      details: {
-        version: '1.0.0',
-        environment: process.env.NODE_ENV || 'development',
-        timestamp: new Date().toISOString()
-      }
-    };
-  } catch (error) {
-    return {
-      status: 'DOWN',
-      details: {
-        error: error.message,
-        timestamp: new Date().toISOString()
-      }
-    };
+  ],
+  customMetrics: [
+    { name: 'epic_conversations_total', help: 'Total number of conversations processed', type: 'counter' },
+    { name: 'epic_response_time_seconds', help: 'Response time for OpenAI API calls', type: 'histogram' }
+  ],
+  healthOptions: {
+    includeDiskSpace: true,
+    includeProcess: true,
+    diskSpaceThreshold: 100 * 1024 * 1024, // 100MB
+    healthCheckTimeout: 5000
   }
-}
-
-// System metrics
-function getSystemMetrics() {
-  const memUsage = process.memoryUsage();
-  const cpuUsage = process.cpuUsage();
-  
-  return {
-    system: {
-      uptime: process.uptime(),
-      memory: {
-        rss: memUsage.rss,
-        heapTotal: memUsage.heapTotal,
-        heapUsed: memUsage.heapUsed,
-        external: memUsage.external
-      },
-      cpu: {
-        user: cpuUsage.user,
-        system: cpuUsage.system
-      },
-      pid: process.pid,
-      nodeVersion: process.version,
-      platform: process.platform
-    },
-    process: {
-      title: process.title,
-      argv: process.argv,
-      execPath: process.execPath,
-      cwd: process.cwd()
-    }
-  };
-}
-
-// Environment info (filtered for security)
-function getEnvironmentInfo() {
-  const env = { ...process.env };
-  
-  // Filter out sensitive information
-  const sensitiveKeys = [
-    'OPENAI_API_KEY',
-    'mongodb_username',
-    'mongodb_password',
-    'MONGODB_URI',
-    'JWT_SECRET',
-    'API_KEY',
-    'SECRET',
-    'PASSWORD',
-    'TOKEN'
-  ];
-  
-  sensitiveKeys.forEach(key => {
-    if (env[key]) {
-      env[key] = '[HIDDEN]';
-    }
-  });
-  
-  return env;
-}
-
-// Application info
-function getApplicationInfo() {
-  return {
-    app: {
-      name: 'Epic Religious Guidance Backend',
-      version: '1.0.0',
-      description: 'Backend API for Epic Religious Guidance Application'
-    },
-    build: {
-      time: new Date().toISOString(),
-      version: '1.0.0'
-    },
-    git: {
-      commit: {
-        time: new Date().toISOString()
-      }
-    }
-  };
-}
+});
 
 export default async function handler(req, res) {
   // Handle CORS
@@ -164,95 +113,49 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Initialize actuator if not already done
+    await actuator.start();
+    
     // Get the path from the query parameters (Vercel dynamic routing)
     const { path } = req.query;
     const pathString = Array.isArray(path) ? path.join('/') : path || '';
     
-    // Debug logging
-    console.log('Request URL:', req.url);
-    console.log('Query path:', req.query.path);
-    console.log('Path string:', pathString);
-    
-    // Route to appropriate actuator endpoint
+    // Route to appropriate actuator endpoint using direct data access methods
     switch (pathString) {
       case 'health':
-        console.log('Handling health endpoint');
-        const mongodbHealth = await checkMongoDBHealth();
-        const appHealth = await checkApplicationHealth();
-        
-        const healthData = {
-          status: mongodbHealth.status === 'UP' && appHealth.status === 'UP' ? 'UP' : 'DOWN',
-          timestamp: new Date().toISOString(),
-          details: {
-            mongodb: mongodbHealth,
-            'epic-app': appHealth
-          }
-        };
-        
-        return res.status(200).json(healthData);
+        const health = await actuator.getHealth();
+        return res.status(200).json(health);
         
       case 'metrics':
-        console.log('Handling metrics endpoint');
-        const metricsData = getSystemMetrics();
-        return res.status(200).json(metricsData);
+        const metrics = await actuator.getMetrics();
+        return res.status(200).json(metrics);
         
       case 'prometheus':
-        console.log('Handling prometheus endpoint');
-        const memUsage = process.memoryUsage();
-        const prometheusData = `# HELP nodejs_memory_rss_bytes Resident set size in bytes.
-# TYPE nodejs_memory_rss_bytes gauge
-nodejs_memory_rss_bytes ${memUsage.rss}
-
-# HELP nodejs_memory_heap_total_bytes Process heap size from node.js in bytes.
-# TYPE nodejs_memory_heap_total_bytes gauge
-nodejs_memory_heap_total_bytes ${memUsage.heapTotal}
-
-# HELP nodejs_memory_heap_used_bytes Process heap size used from node.js in bytes.
-# TYPE nodejs_memory_heap_used_bytes gauge
-nodejs_memory_heap_used_bytes ${memUsage.heapUsed}
-
-# HELP nodejs_memory_external_bytes Node.js external memory size in bytes.
-# TYPE nodejs_memory_external_bytes gauge
-nodejs_memory_external_bytes ${memUsage.external}
-
-# HELP nodejs_process_cpu_seconds_total Total user and system CPU time spent in seconds.
-# TYPE nodejs_process_cpu_seconds_total counter
-nodejs_process_cpu_seconds_total ${(process.cpuUsage().user + process.cpuUsage().system) / 1000000}
-
-# HELP nodejs_process_start_time_seconds Start time of the process since unix epoch in seconds.
-# TYPE nodejs_process_start_time_seconds gauge
-nodejs_process_start_time_seconds ${process.uptime()}`;
-        
+        const prometheus = await actuator.getPrometheusMetrics();
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(200).send(prometheusData);
+        return res.status(200).send(prometheus);
         
       case 'info':
-        console.log('Handling info endpoint');
-        const infoData = getApplicationInfo();
-        return res.status(200).json(infoData);
+        const info = await actuator.getInfo();
+        return res.status(200).json(info);
         
       case 'env':
-        console.log('Handling env endpoint');
-        const envData = getEnvironmentInfo();
-        return res.status(200).json(envData);
+        const env = await actuator.getEnvironment();
+        return res.status(200).json(env);
         
       case 'threaddump':
-        console.log('Handling threaddump endpoint');
-        const threadDumpData = {
-          timestamp: new Date().toISOString(),
-          threads: [
-            {
-              threadId: 1,
-              threadName: 'main',
-              threadState: 'RUNNABLE',
-              stackTrace: process.version
-            }
-          ]
-        };
-        return res.status(200).json(threadDumpData);
+        const threadDump = actuator.getThreadDump();
+        return res.status(200).json(threadDump);
+        
+      case 'heapdump':
+        if (req.method === 'POST') {
+          const heapDump = await actuator.getHeapDump();
+          return res.status(200).json(heapDump);
+        } else {
+          return res.status(405).json({ error: 'Method not allowed' });
+        }
         
       case '':
-        console.log('Handling root endpoint');
         // Root endpoint with available links
         const rootData = {
           _links: {
@@ -261,23 +164,23 @@ nodejs_process_start_time_seconds ${process.uptime()}`;
             prometheus: { href: '/api/actuator/prometheus' },
             info: { href: '/api/actuator/info' },
             env: { href: '/api/actuator/env' },
-            threaddump: { href: '/api/actuator/threaddump' }
+            threaddump: { href: '/api/actuator/threaddump' },
+            heapdump: { href: '/api/actuator/heapdump' }
           }
         };
         return res.status(200).json(rootData);
         
       default:
-        console.log('Handling default case for path:', pathString);
         return res.status(404).json({ 
           error: 'Endpoint not found',
-          path: pathString,
           availableEndpoints: [
             '/api/actuator/health',
             '/api/actuator/metrics',
             '/api/actuator/prometheus',
             '/api/actuator/info',
             '/api/actuator/env',
-            '/api/actuator/threaddump'
+            '/api/actuator/threaddump',
+            '/api/actuator/heapdump'
           ]
         });
     }
