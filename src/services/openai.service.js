@@ -12,7 +12,7 @@ export class OpenAIService {
     this.model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
     this.maxTokens = parseInt(process.env.OPENAI_TOKEN) || 1000;
     this.baseTemperature = parseFloat(process.env.OPENAI_TEMPERATURE) || 0.8;
-    
+
     if (!this.apiKey) {
       throw new Error('OPENAI_API_KEY environment variable is required');
     }
@@ -46,7 +46,7 @@ export class OpenAIService {
    */
   generateRandomizedTemperature() {
     const temperatureVariance = 0.15;
-    return Math.min(1.0, Math.max(0.6, 
+    return Math.min(1.0, Math.max(0.6,
       this.baseTemperature + (Math.random() - 0.5) * temperatureVariance * 2
     ));
   }
@@ -57,12 +57,12 @@ export class OpenAIService {
    * @returns {Array} - Modified messages with diversity instruction
    */
   addDiversityInstruction(messages) {
-    const diversityInstruction = 
-      "IMPORTANT: Provide diverse quotes from different chapters and verses. " +
-      "Avoid repeating the same quotes. Each response should include quotes from " +
-      "various parts of the scripture to provide comprehensive guidance.";
-    
-    return messages.map(msg => {
+    const diversityInstruction =
+      'IMPORTANT: Provide diverse quotes from different chapters and verses. ' +
+      'Avoid repeating the same quotes. Each response should include quotes from ' +
+      'various parts of the scripture to provide comprehensive guidance.';
+
+    return messages.map((msg) => {
       if (msg.role === 'system') {
         return {
           ...msg,
@@ -81,7 +81,7 @@ export class OpenAIService {
    */
   async makeAPICall(requestData, retries = 3) {
     const startTime = Date.now();
-    
+
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -99,21 +99,21 @@ export class OpenAIService {
         }
 
         const data = await response.json();
-        
+
         // Record metrics
         this.recordMetrics(startTime, data);
-        
+
         return data;
       } catch (error) {
         console.error(`❌ OpenAI API attempt ${attempt} failed:`, error.message);
-        
+
         if (attempt === retries) {
           throw error;
         }
-        
+
         // Exponential backoff
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
@@ -121,19 +121,19 @@ export class OpenAIService {
   /**
    * Record metrics for monitoring
    * @param {number} startTime - Start time of the request
-   * @param {Object} data - Response data
+   * @param {Object} _data - Response data
    */
-  recordMetrics(startTime, data) {
+  recordMetrics(startTime, _data) {
     try {
       const responseTime = (Date.now() - startTime) / 1000;
-      
+
       // Record response time
       const responseTimeHistogram = getCustomMetric('epic_response_time_seconds');
       if (responseTimeHistogram) {
         responseTimeHistogram.observe(responseTime);
         console.log(`✅ Recorded response time: ${responseTime.toFixed(3)}s`);
       }
-      
+
       // Record conversation count
       const conversationsCounter = getCustomMetric('epic_conversations_total');
       if (conversationsCounter) {
@@ -154,9 +154,9 @@ export class OpenAIService {
   async generateChatCompletion(messages, options = {}) {
     try {
       // Extract user message for analysis
-      const userMessage = messages.find(msg => msg.role === 'user')?.content || '';
+      const userMessage = messages.find((msg) => msg.role === 'user')?.content || '';
       const selectedText = this.extractSelectedText(userMessage);
-      
+
       // Prepare request data with options override
       const requestData = {
         model: options.model || this.model,
@@ -171,7 +171,7 @@ export class OpenAIService {
 
       console.log('🚀 Making OpenAI API request...');
       const data = await this.makeAPICall(requestData);
-      
+
       if (!data.choices || data.choices.length === 0) {
         throw new Error('No response generated from OpenAI API');
       }
@@ -190,13 +190,13 @@ export class OpenAIService {
       };
     } catch (error) {
       console.error('❌ Error generating chat completion:', error.message);
-      
+
       // Record error metric
       const errorsCounter = getCustomMetric('epic_errors_total');
       if (errorsCounter) {
         errorsCounter.inc();
       }
-      
+
       throw error;
     }
   }

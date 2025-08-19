@@ -16,13 +16,13 @@ export class ConversationModel {
     try {
       const db = await getDB();
       const collection = db.collection('conversations');
-      
+
       // Extract the actual user question from the combined prompt
       let actualUserInput = conversationData.userInput;
-      if (conversationData.userInput.includes("User's situation:")) {
-        actualUserInput = conversationData.userInput.split("User's situation:")[1]?.trim() || conversationData.userInput;
+      if (conversationData.userInput.includes('User\'s situation:')) {
+        actualUserInput = conversationData.userInput.split('User\'s situation:')[1]?.trim() || conversationData.userInput;
       }
-      
+
       const conversation = {
         userInput: actualUserInput,
         aiResponse: conversationData.aiResponse.content,
@@ -36,7 +36,7 @@ export class ConversationModel {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
+
       const result = await collection.insertOne(conversation);
       console.log('✅ Conversation stored with ID:', result.insertedId);
       return result.insertedId;
@@ -59,7 +59,7 @@ export class ConversationModel {
       const { limit = 100, skip = 0, sort = { timestamp: -1 } } = options;
       const db = await getDB();
       const collection = db.collection('conversations');
-      
+
       return await collection.find({})
         .sort(sort)
         .skip(skip)
@@ -80,7 +80,7 @@ export class ConversationModel {
     try {
       const db = await getDB();
       const collection = db.collection('conversations');
-      
+
       return await collection.findOne({ _id: id });
     } catch (error) {
       console.error('❌ Error fetching conversation by ID:', error.message);
@@ -100,7 +100,7 @@ export class ConversationModel {
       const { limit = 100, skip = 0 } = options;
       const db = await getDB();
       const collection = db.collection('conversations');
-      
+
       return await collection.find({
         timestamp: {
           $gte: startDate,
@@ -125,7 +125,7 @@ export class ConversationModel {
     try {
       const db = await getDB();
       const collection = db.collection('conversations');
-      
+
       const stats = await collection.aggregate([
         {
           $group: {
@@ -138,7 +138,7 @@ export class ConversationModel {
           }
         }
       ]).toArray();
-      
+
       const result = stats[0] || {
         totalConversations: 0,
         totalTokens: 0,
@@ -146,7 +146,7 @@ export class ConversationModel {
         uniqueModels: [],
         uniqueOptions: []
       };
-      
+
       return {
         ...result,
         uniqueModelsCount: result.uniqueModels.length,
@@ -167,7 +167,7 @@ export class ConversationModel {
     try {
       const db = await getDB();
       const collection = db.collection('conversations');
-      
+
       const result = await collection.deleteOne({ _id: id });
       return result.deletedCount > 0;
     } catch (error) {

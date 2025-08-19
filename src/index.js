@@ -16,13 +16,13 @@ const app = express();
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-    },
+      defaultSrc: ['\'self\''],
+      styleSrc: ['\'self\'', '\'unsafe-inline\''],
+      scriptSrc: ['\'self\''],
+      imgSrc: ['\'self\'', 'data:', 'https:']
+    }
   },
-  crossOriginEmbedderPolicy: false,
+  crossOriginEmbedderPolicy: false
 }));
 
 // Compression middleware
@@ -87,9 +87,9 @@ app.use('*', (req, res) => {
 });
 
 // Error handling middleware
-app.use((error, req, res, next) => {
+app.use((error, req, res, _next) => {
   console.error('❌ Unhandled error:', error);
-  
+
   res.status(500).json({
     error: 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
@@ -104,10 +104,10 @@ async function startServer() {
   try {
     // Initialize actuator
     await initializeActuator();
-    
+
     // Get actuator port or use default
     const port = process.env.PORT || 3000;
-    
+
     // Start server
     const server = app.listen(port, () => {
       console.log(`🚀 Epic Backend running on http://localhost:${port}`);
@@ -120,10 +120,10 @@ async function startServer() {
     // Graceful shutdown
     const gracefulShutdown = async (signal) => {
       console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
-      
+
       server.close(async () => {
         console.log('✅ HTTP server closed');
-        
+
         try {
           await shutdownActuator();
           console.log('✅ Actuator shutdown complete');
@@ -137,7 +137,7 @@ async function startServer() {
 
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);

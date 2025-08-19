@@ -14,7 +14,7 @@ export class OpenAIController {
   static async handleGenericRequest(req, res) {
     // Apply CORS middleware
     corsMiddleware(req, res, () => {});
-    
+
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
@@ -22,7 +22,7 @@ export class OpenAIController {
 
     // Validate request method
     if (req.method !== 'POST') {
-      return res.status(405).json({ 
+      return res.status(405).json({
         error: 'Method not allowed',
         message: 'Only POST requests are allowed'
       });
@@ -30,7 +30,7 @@ export class OpenAIController {
 
     try {
       const { prompt, context } = req.body;
-      
+
       // Validate request structure
       if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({
@@ -42,7 +42,7 @@ export class OpenAIController {
       console.log('🔄 Processing custom prompt request...');
 
       return await OpenAIController.handleCustomPrompt({ prompt, context }, res);
-      
+
     } catch (error) {
       console.error('❌ Custom prompt request error:', error.message);
       return res.status(500).json({
@@ -53,7 +53,6 @@ export class OpenAIController {
   }
 
 
-
   /**
    * Handle custom prompt requests
    * @param {Object} data - Request data
@@ -62,7 +61,7 @@ export class OpenAIController {
   static async handleCustomPrompt(data, res) {
     try {
       const { prompt, context } = data;
-      
+
       if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({
           error: 'Invalid prompt',
@@ -83,16 +82,16 @@ export class OpenAIController {
       ];
 
       console.log('📝 Processing custom prompt request...');
-      
+
       // Generate response using environment variables for options
       const { data: responseData, metadata } = await openAIService.generateChatCompletion(messages);
-      
+
       return res.status(200).json({
         success: true,
         data: responseData,
         metadata
       });
-      
+
     } catch (error) {
       console.error('❌ Custom prompt error:', error.message);
       return res.status(500).json({
@@ -110,7 +109,7 @@ export class OpenAIController {
   static async handleChatCompletion(req, res) {
     // Apply CORS middleware
     corsMiddleware(req, res, () => {});
-    
+
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
@@ -118,7 +117,7 @@ export class OpenAIController {
 
     // Validate request method
     if (req.method !== 'POST') {
-      return res.status(405).json({ 
+      return res.status(405).json({
         error: 'Method not allowed',
         message: 'Only POST requests are allowed'
       });
@@ -127,7 +126,7 @@ export class OpenAIController {
     try {
       // Validate request body
       const { messages } = req.body;
-      
+
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({
           error: 'Invalid request body',
@@ -136,8 +135,8 @@ export class OpenAIController {
       }
 
       // Validate message structure
-      const validMessages = messages.every(msg => 
-        msg && typeof msg === 'object' && 
+      const validMessages = messages.every((msg) =>
+        msg && typeof msg === 'object' &&
         msg.role && typeof msg.role === 'string' &&
         msg.content && typeof msg.content === 'string'
       );
@@ -150,7 +149,7 @@ export class OpenAIController {
       }
 
       // Check for user message
-      const userMessage = messages.find(msg => msg.role === 'user');
+      const userMessage = messages.find((msg) => msg.role === 'user');
       if (!userMessage) {
         return res.status(400).json({
           error: 'Missing user message',
@@ -159,10 +158,10 @@ export class OpenAIController {
       }
 
       console.log('📝 Processing chat completion request...');
-      
+
       // Generate chat completion
       const { data, metadata } = await openAIService.generateChatCompletion(messages);
-      
+
       // Store conversation in database
       try {
         await ConversationModel.create({
@@ -178,10 +177,10 @@ export class OpenAIController {
 
       // Return response
       return res.status(200).json(data);
-      
+
     } catch (error) {
       console.error('❌ OpenAI controller error:', error.message);
-      
+
       // Return appropriate error response
       if (error.message.includes('OpenAI API error')) {
         return res.status(502).json({
@@ -189,14 +188,13 @@ export class OpenAIController {
           message: error.message
         });
       }
-      
+
       return res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to process request'
       });
     }
   }
-
 
 
   /**
@@ -213,7 +211,7 @@ export class OpenAIController {
         version: process.env.npm_package_version || '1.0.0',
         environment: process.env.NODE_ENV || 'development'
       };
-      
+
       return res.status(200).json(health);
     } catch (error) {
       return res.status(500).json({
@@ -250,15 +248,15 @@ export class OpenAIController {
   static async getConversations(req, res) {
     try {
       const { limit = 50, skip = 0, sort = 'timestamp' } = req.query;
-      
+
       const options = {
         limit: Math.min(parseInt(limit), 100), // Max 100 records
         skip: parseInt(skip),
         sort: { [sort]: -1 }
       };
-      
+
       const conversations = await ConversationModel.findAll(options);
-      
+
       return res.status(200).json({
         conversations,
         pagination: {

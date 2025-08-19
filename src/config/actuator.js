@@ -17,9 +17,9 @@ const checkAppHealth = async () => {
       'mongodb_username',
       'mongodb_password'
     ];
-    
-    const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-    
+
+    const missingVars = requiredEnvVars.filter((varName) => !process.env[varName]);
+
     if (missingVars.length > 0) {
       return {
         status: 'DOWN',
@@ -29,7 +29,7 @@ const checkAppHealth = async () => {
         }
       };
     }
-    
+
     return {
       status: 'UP',
       details: {
@@ -62,13 +62,13 @@ const checkOpenAIHealth = async () => {
         'Content-Type': 'application/json'
       }
     });
-    
+
     if (!response.ok) {
       throw new Error(`OpenAI API returned ${response.status}: ${response.statusText}`);
     }
-    
+
     const data = await response.json();
-    
+
     return {
       status: 'UP',
       details: {
@@ -101,14 +101,14 @@ export const actuator = new LightweightActuator({
   envOptions: {
     // 🔒 SECURITY: Mask sensitive environment variables
     maskPatterns: [
-      'PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'CREDENTIAL', 
-      'AUTH', 'COMMIT', 'DEPLOYMENT_ID', 'ID', 'Deployment', 
+      'PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'CREDENTIAL',
+      'AUTH', 'COMMIT', 'DEPLOYMENT_ID', 'ID', 'Deployment',
       'id', 'deployment', 'PRIVATE', 'SIGNATURE'
     ],
     maskCustomVariables: [
-      'mongodb_username', 
-      'mongodb_password', 
-      'OPENAI_API_KEY', 
+      'mongodb_username',
+      'mongodb_password',
+      'OPENAI_API_KEY',
       'OPENAI_TOKEN',
       'AWS_ACCESS_KEY_ID',
       'AWS_SECRET_ACCESS_KEY',
@@ -134,14 +134,14 @@ export const actuator = new LightweightActuator({
     }
   ],
   customMetrics: [
-    { 
-      name: 'epic_conversations_total', 
-      help: 'Total number of conversations processed', 
-      type: 'counter' 
+    {
+      name: 'epic_conversations_total',
+      help: 'Total number of conversations processed',
+      type: 'counter'
     },
-    { 
-      name: 'epic_response_time_seconds', 
-      help: 'Response time for OpenAI API calls', 
+    {
+      name: 'epic_response_time_seconds',
+      help: 'Response time for OpenAI API calls',
       type: 'histogram',
       buckets: [0.1, 0.5, 1, 2, 5, 10]
     },
@@ -182,7 +182,7 @@ export async function initializeActuator() {
 
 /**
  * Get custom metric by name
- * @param {string} metricName 
+ * @param {string} metricName
  * @returns {Object|null}
  */
 export function getCustomMetric(metricName) {

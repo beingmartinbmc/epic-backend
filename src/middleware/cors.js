@@ -17,20 +17,20 @@ const DEV_ORIGINS = [];
  */
 function isOriginAllowed(origin) {
   if (!origin) return false;
-  
+
   // Check exact matches
   if (ALLOWED_ORIGINS.includes(origin)) {
     return true;
   }
-  
+
   // Check development origins
   if (process.env.NODE_ENV === 'development') {
-    return DEV_ORIGINS.some(devOrigin => {
+    return DEV_ORIGINS.some((devOrigin) => {
       const pattern = devOrigin.replace('*', '.*');
       return new RegExp(pattern).test(origin);
     });
   }
-  
+
   return false;
 }
 
@@ -41,22 +41,22 @@ function isOriginAllowed(origin) {
  * @param {Function} next - Express next function
  */
 export function corsMiddleware(req, res, next) {
-  const origin = req.headers.origin;
+  const { origin } = req.headers;
   const isAllowed = isOriginAllowed(origin);
-  
+
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', isAllowed ? origin : '');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
-  
+
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
-  
+
   next();
 }
 
@@ -67,18 +67,18 @@ export function corsMiddleware(req, res, next) {
  * @param {Function} next - Express next function
  */
 export function strictCorsMiddleware(req, res, next) {
-  const origin = req.headers.origin;
-  
+  const { origin } = req.headers;
+
   // Only allow specific origins in production
   if (process.env.NODE_ENV === 'production') {
     if (!ALLOWED_ORIGINS.includes(origin)) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'CORS policy violation',
         message: 'Origin not allowed'
       });
     }
   }
-  
+
   corsMiddleware(req, res, next);
 }
 

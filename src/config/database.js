@@ -22,11 +22,11 @@ const MONGODB_CONFIG = {
 // Construct MongoDB connection string
 const getMongoUri = () => {
   const { username, password, cluster, database } = MONGODB_CONFIG;
-  
+
   if (!username || !password) {
     throw new Error('MongoDB credentials not found in environment variables');
   }
-  
+
   return `mongodb+srv://${username}:${password}@${cluster}/${database}?retryWrites=true&w=majority`;
 };
 
@@ -45,16 +45,16 @@ export async function connectToMongoDB() {
 
   try {
     console.log('🔌 Connecting to MongoDB...');
-    
+
     const uri = getMongoUri();
     client = new MongoClient(uri, MONGODB_CONFIG.options);
-    
+
     await client.connect();
     db = client.db(MONGODB_CONFIG.database);
-    
+
     // Test the connection
     await db.admin().ping();
-    
+
     console.log('✅ Connected to MongoDB successfully');
     return { client, db };
   } catch (error) {
@@ -98,13 +98,13 @@ export async function checkMongoDBHealth() {
   try {
     const { db } = await connectToMongoDB();
     const adminDb = db.admin();
-    
+
     // Test database connectivity
     await adminDb.ping();
-    
+
     // Get database stats
     const stats = await db.stats();
-    
+
     return {
       status: 'UP',
       details: {

@@ -67,7 +67,7 @@ async function testActuator() {
     console.log('✅ Environment endpoint test completed\n');
 
     console.log('🎉 All actuator tests passed successfully!');
-    
+
     return true;
   } catch (error) {
     console.error('❌ Actuator test failed:', error.message);
@@ -78,10 +78,10 @@ async function testActuator() {
 // Run tests if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   testActuator()
-    .then(success => {
+    .then((success) => {
       process.exit(success ? 0 : 1);
     })
-    .catch(error => {
+    .catch((error) => {
       console.error('❌ Test execution failed:', error);
       process.exit(1);
     });
