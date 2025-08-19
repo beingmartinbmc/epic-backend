@@ -23,7 +23,7 @@
     "dev": "vercel dev",
     "deploy": "vercel --prod",
     "start": "node src/index.js",
-    "build": "npm run lint",
+    "build": "echo 'No build step needed for serverless API'",
     "lint": "eslint src/ --ext .js",
     "lint:fix": "eslint src/ --ext .js --fix",
     "format": "prettier --write src/",
