@@ -104,9 +104,6 @@ export class OpenAIController {
    * @param {Object} res - Express response object
    */
   static async handleChatCompletion(req, res) {
-    // Apply CORS middleware
-    corsMiddleware(req, res, () => {});
-
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
