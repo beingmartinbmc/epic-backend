@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epic Backend API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .endpoint {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        .method {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .url {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Epic Backend API</h1>
+    <p>Welcome to the Epic Religious Guidance Backend API. This is a serverless API built with Node.js and deployed on Vercel.</p>
+    
+    <h2>Available Endpoints</h2>
+    
+    <div class="endpoint">
+        <div class="method">GET</div>
+        <div class="url">/api/openai-proxy</div>
+        <p>OpenAI chat completion proxy endpoint</p>
+    </div>
+    
+    <div class="endpoint">
+        <div class="method">POST</div>
+        <div class="url">/api/generic</div>
+        <p>Custom prompt API endpoint</p>
+    </div>
+    
+    <div class="endpoint">
+        <div class="method">GET</div>
+        <div class="url">/api/stats</div>
+        <p>Get conversation statistics</p>
+    </div>
+    
+    <div class="endpoint">
+        <div class="method">GET</div>
+        <div class="url">/api/conversations</div>
+        <p>Get conversations with pagination</p>
+    </div>
+    
+    <div class="endpoint">
+        <div class="method">GET</div>
+        <div class="url">/actuator/health</div>
+        <p>Health check endpoint</p>
+    </div>
+    
+    <h2>Documentation</h2>
+    <p>For detailed API documentation, please refer to the README.md file in the repository.</p>
+    
+    <h2>Status</h2>
+    <p>✅ API is running and ready to serve requests</p>
+</body>
+</html>
