@@ -241,22 +241,44 @@ export class OpenAIController {
    */
   static async getConversations(req, res) {
     try {
-      const { limit = 50, skip = 0, sort = 'timestamp' } = req.query;
+      // Parse query parameters with validation
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+      const sort = req.query.sort || 'timestamp';
+      const sortOrder = req.query.order === 'asc' ? 1 : -1;
+
+      // Calculate skip value
+      const skip = (page - 1) * limit;
 
       const options = {
-        limit: Math.min(parseInt(limit), 100), // Max 100 records
-        skip: parseInt(skip),
-        sort: { [sort]: -1 }
+        limit,
+        skip,
+        sort: { [sort]: sortOrder }
       };
 
-      const conversations = await ConversationModel.findAll(options);
+      // Get conversations and total count in parallel
+      const [conversations, totalCount] = await Promise.all([
+        ConversationModel.findAll(options),
+        ConversationModel.getTotalCount()
+      ]);
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(totalCount / limit);
+      const hasNextPage = page < totalPages;
+      const hasPrevPage = page > 1;
 
       return res.status(200).json({
         conversations,
         pagination: {
-          limit: options.limit,
-          skip: options.skip,
-          count: conversations.length
+          currentPage: page,
+          totalPages,
+          totalCount,
+          limit,
+          skip,
+          hasNextPage,
+          hasPrevPage,
+          nextPage: hasNextPage ? page + 1 : null,
+          prevPage: hasPrevPage ? page - 1 : null
         }
       });
     } catch (error) {

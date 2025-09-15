@@ -175,4 +175,20 @@ export class ConversationModel {
       throw new Error(`Failed to delete conversation: ${error.message}`);
     }
   }
+
+  /**
+   * Get total count of conversations
+   * @returns {Promise<number>} - Total count of conversations
+   */
+  static async getTotalCount() {
+    try {
+      const db = await getDB();
+      const collection = db.collection('conversations');
+
+      return await collection.countDocuments({});
+    } catch (error) {
+      console.error('❌ Error getting total count:', error.message);
+      throw new Error(`Failed to get total count: ${error.message}`);
+    }
+  }
 }
