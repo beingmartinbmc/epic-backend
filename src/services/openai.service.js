@@ -149,12 +149,7 @@ export class OpenAIService {
       const requestData = {
         model: options.model || this.model,
         messages: options.skipDiversityInstruction ? messages : this.addDiversityInstruction(messages),
-        // temperature: options.temperature || this.generateRandomizedTemperature(),
-          max_completion_tokens: options.maxTokens || this.maxTokens,
-        top_p: options.topP || 0.85,
-        frequency_penalty: options.frequencyPenalty || 0.4,
-        presence_penalty: options.presencePenalty || 0.2,
-        stop: options.stop || null
+        max_completion_tokens: options.maxTokens || this.maxTokens
       };
 
       console.log('🚀 Making OpenAI API request...');
@@ -170,7 +165,7 @@ export class OpenAIService {
           selectedText,
           model: requestData.model,
           // temperature: requestData.temperature,
-          maxTokens: requestData.max_tokens,
+          maxTokens: requestData.max_completion_tokens,
           usage: data.usage || {},
           requestId: data.id,
           customOptions: options
