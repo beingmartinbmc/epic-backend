@@ -4,7 +4,7 @@
 
 // Allowed origins configuration - ONLY your production domain
 const ALLOWED_ORIGINS = [
-  'https://beingmartinbmc.github.io'
+  'https://beingmartinbmc.github.io', 'https://trisshasantos.github.io'
 ];
 
 // No development origins - security first!
