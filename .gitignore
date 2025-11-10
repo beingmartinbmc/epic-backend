@@ -18,6 +18,11 @@ yarn-error.log*
 logs
 *.log
 
+# Audio files (test outputs)
+*.mp3
+*.wav
+test_output.*
+
 # Runtime data
 pids
 *.pid
