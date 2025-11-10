@@ -29,7 +29,7 @@ export class ConversationModel {
         timestamp: new Date(),
         optionChosen: conversationData.metadata.selectedText || 'ALL',
         model: conversationData.metadata.model,
-        temperature: conversationData.metadata.temperature,
+        // temperature: conversationData.metadata.temperature,
         maxTokens: conversationData.metadata.maxTokens,
         usage: conversationData.metadata.usage || {},
         requestId: conversationData.metadata.requestId,

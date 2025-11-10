@@ -11,7 +11,6 @@ export class OpenAIService {
     this.apiKey = process.env.OPENAI_API_KEY;
     this.model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
     this.maxTokens = parseInt(process.env.OPENAI_TOKEN) || 1000;
-    this.baseTemperature = parseFloat(process.env.OPENAI_TEMPERATURE) || 0.8;
 
     if (!this.apiKey) {
       throw new Error('OPENAI_API_KEY environment variable is required');
@@ -38,17 +37,6 @@ export class OpenAIService {
       return 'GURU_GRANTH_SAHIB';
     }
     return 'ALL';
-  }
-
-  /**
-   * Generate randomized temperature for diversity
-   * @returns {number} - Randomized temperature value
-   */
-  generateRandomizedTemperature() {
-    const temperatureVariance = 0.15;
-    return Math.min(1.0, Math.max(0.6,
-      this.baseTemperature + (Math.random() - 0.5) * temperatureVariance * 2
-    ));
   }
 
   /**
@@ -181,7 +169,7 @@ export class OpenAIService {
         metadata: {
           selectedText,
           model: requestData.model,
-          temperature: requestData.temperature,
+          // temperature: requestData.temperature,
           maxTokens: requestData.max_tokens,
           usage: data.usage || {},
           requestId: data.id,
