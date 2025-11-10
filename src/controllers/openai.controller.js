@@ -99,6 +99,74 @@ export class OpenAIController {
   }
 
   /**
+   * Handle streaming chat completion request
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  static async handleStreamingRequest(req, res) {
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
+    // Validate request method
+    if (req.method !== 'POST') {
+      return res.status(405).json({
+        error: 'Method not allowed',
+        message: 'Only POST requests are allowed'
+      });
+    }
+
+    try {
+      const { prompt, context } = req.body;
+
+      // Validate request structure
+      if (!prompt || typeof prompt !== 'string') {
+        return res.status(400).json({
+          error: 'Invalid request',
+          message: 'Prompt is required and must be a string'
+        });
+      }
+
+      console.log('🌊 Processing streaming request...');
+
+      // Set up Server-Sent Events headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+
+      // Create messages array from prompt and context
+      const messages = [
+        {
+          role: 'system',
+          content: context || 'You are a helpful assistant.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ];
+
+      // Generate streaming response using OpenAI service
+      await openAIService.generateStreamingChatCompletion(messages, res);
+
+    } catch (error) {
+      console.error('❌ Streaming request error:', error.message);
+      
+      // Send error event
+      res.write(`event: error\n`);
+      res.write(`data: ${JSON.stringify({
+        error: 'Internal server error',
+        message: 'Failed to process streaming request'
+      })}\n\n`);
+      
+      res.end();
+    }
+  }
+
+  /**
    * Handle chat completion request (legacy method for backward compatibility)
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object

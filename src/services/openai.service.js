@@ -200,6 +200,159 @@ export class OpenAIService {
       throw error;
     }
   }
+
+  /**
+   * Generate streaming chat completion
+   * @param {Array} messages - Array of messages
+   * @param {Object} res - Express response object
+   * @param {Object} options - Optional parameters for customization
+   * @returns {Promise<void>} - Streams response to client
+   */
+  async generateStreamingChatCompletion(messages, res, options = {}) {
+    try {
+      const selectedText = this.extractSelectedText(
+        messages.find(msg => msg.role === 'user')?.content || ''
+      );
+
+      // Record API call metric
+      const apiCallsCounter = getCustomMetric('epic_api_calls_total');
+      if (apiCallsCounter) {
+        apiCallsCounter.inc();
+      }
+
+      // Add diversity instruction
+      const diversifiedMessages = this.addDiversityInstruction(messages);
+
+      // Prepare request data for streaming
+      const requestData = {
+        model: options.model || this.model,
+        messages: diversifiedMessages,
+        max_tokens: options.maxTokens || this.maxTokens,
+        temperature: options.temperature || this.generateRandomizedTemperature(),
+        stream: true, // Enable streaming
+        stream_options: {
+          include_usage: true
+        }
+      };
+
+      console.log(`🚀 Starting streaming request to OpenAI API...`);
+
+      // Make streaming API call
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`OpenAI API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+      }
+
+      console.log(`✅ Streaming response received, processing chunks...`);
+
+      // Send initial metadata
+      res.write(`event: start\n`);
+      res.write(`data: ${JSON.stringify({
+        selectedText,
+        model: requestData.model,
+        temperature: requestData.temperature,
+        maxTokens: requestData.max_tokens
+      })}\n\n`);
+
+      // Process streaming response
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let totalTokens = 0;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              
+              if (data === '[DONE]') {
+                // Send completion event
+                res.write(`event: done\n`);
+                res.write(`data: ${JSON.stringify({
+                  totalTokens,
+                  selectedText,
+                  timestamp: new Date().toISOString()
+                })}\n\n`);
+                res.end();
+                return;
+              }
+
+              try {
+                const parsed = JSON.parse(data);
+                
+                if (parsed.choices && parsed.choices[0]) {
+                  const delta = parsed.choices[0].delta;
+                  
+                  if (delta.content) {
+                    // Send content chunk
+                    res.write(`event: chunk\n`);
+                    res.write(`data: ${JSON.stringify({
+                      content: delta.content,
+                      timestamp: new Date().toISOString()
+                    })}\n\n`);
+                  }
+
+                  // Track usage if available
+                  if (parsed.usage) {
+                    totalTokens = parsed.usage.total_tokens;
+                  }
+                }
+              } catch (parseError) {
+                console.warn('⚠️ Failed to parse streaming chunk:', parseError.message);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Record success metric
+      const successCounter = getCustomMetric('epic_successful_requests_total');
+      if (successCounter) {
+        successCounter.inc();
+      }
+
+    } catch (error) {
+      console.error('❌ Error in streaming chat completion:', error.message);
+
+      // Record error metric
+      const errorsCounter = getCustomMetric('epic_errors_total');
+      if (errorsCounter) {
+        errorsCounter.inc();
+      }
+
+      // Send error event
+      res.write(`event: error\n`);
+      res.write(`data: ${JSON.stringify({
+        error: 'Stream processing failed',
+        message: error.message,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+      
+      res.end();
+    }
+  }
 }
 
 // Export singleton instance
