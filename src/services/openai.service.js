@@ -19,6 +19,60 @@ export class OpenAIService {
   }
 
   /**
+   * Find natural break points in text for better audio chunking
+   * @param {string} text - Text to analyze
+   * @param {number} targetLength - Target chunk length
+   * @returns {number} - Position of break point, or -1 if none found
+   */
+  findNaturalBreakPoint(text, targetLength) {
+    const words = text.split(' ');
+    if (words.length < targetLength) return -1;
+
+    // Look for sentence endings first
+    const sentenceEndings = /[.!?]\s+/g;
+    let match;
+    let bestBreak = -1;
+
+    while ((match = sentenceEndings.exec(text)) !== null) {
+      const wordCountAtBreak = text.substring(0, match.index).split(' ').length;
+      if (wordCountAtBreak >= targetLength * 0.7 && wordCountAtBreak <= targetLength * 1.3) {
+        return match.index + match[0].length;
+      }
+      if (wordCountAtBreak <= targetLength) {
+        bestBreak = match.index + match[0].length;
+      }
+    }
+
+    // If no sentence ending found, look for commas, semicolons, or other breaks
+    if (bestBreak === -1) {
+      const pausePoints = /[,;:]\s+/g;
+      while ((match = pausePoints.exec(text)) !== null) {
+        const wordCountAtBreak = text.substring(0, match.index).split(' ').length;
+        if (wordCountAtBreak >= targetLength * 0.8 && wordCountAtBreak <= targetLength * 1.2) {
+          return match.index + match[0].length;
+        }
+        if (wordCountAtBreak <= targetLength) {
+          bestBreak = match.index + match[0].length;
+        }
+      }
+    }
+
+    return bestBreak;
+  }
+
+  /**
+   * Estimate audio duration based on text length and speaking rate
+   * @param {string} text - Text to estimate duration for
+   * @returns {number} - Estimated duration in milliseconds
+   */
+  estimateAudioDuration(text) {
+    // Average speaking rate: ~150 words per minute, ~2.5 words per second
+    const wordCount = text.split(' ').length;
+    const wordsPerSecond = 2.5;
+    return Math.round((wordCount / wordsPerSecond) * 1000);
+  }
+
+  /**
    * Extract selected text option from user message
    * @param {string} userMessage - User's message
    * @returns {string} - Selected text option
@@ -211,7 +265,7 @@ export class OpenAIService {
   async generateStreamingChatCompletion(messages, res, options = {}) {
     try {
       const selectedText = this.extractSelectedText(
-        messages.find(msg => msg.role === 'user')?.content || ''
+        messages.find((msg) => msg.role === 'user')?.content || ''
       );
 
       // Record API call metric
@@ -235,7 +289,7 @@ export class OpenAIService {
         }
       };
 
-      console.log(`🚀 Starting streaming request to OpenAI API...`);
+      console.log('🚀 Starting streaming request to OpenAI API...');
 
       // Make streaming API call
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -252,10 +306,10 @@ export class OpenAIService {
         throw new Error(`OpenAI API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
       }
 
-      console.log(`✅ Streaming response received, processing chunks...`);
+      console.log('✅ Streaming response received, processing chunks...');
 
       // Send initial metadata
-      res.write(`event: start\n`);
+      res.write('event: start\n');
       res.write(`data: ${JSON.stringify({
         selectedText,
         model: requestData.model,
@@ -270,9 +324,10 @@ export class OpenAIService {
       let totalTokens = 0;
 
       try {
+        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { done, value } = await reader.read();
-          
+
           if (done) {
             break;
           }
@@ -284,10 +339,10 @@ export class OpenAIService {
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
-              
+
               if (data === '[DONE]') {
                 // Send completion event
-                res.write(`event: done\n`);
+                res.write('event: done\n');
                 res.write(`data: ${JSON.stringify({
                   totalTokens,
                   selectedText,
@@ -299,13 +354,13 @@ export class OpenAIService {
 
               try {
                 const parsed = JSON.parse(data);
-                
+
                 if (parsed.choices && parsed.choices[0]) {
-                  const delta = parsed.choices[0].delta;
-                  
+                  const { delta } = parsed.choices[0];
+
                   if (delta.content) {
                     // Send content chunk
-                    res.write(`event: chunk\n`);
+                    res.write('event: chunk\n');
                     res.write(`data: ${JSON.stringify({
                       content: delta.content,
                       timestamp: new Date().toISOString()
@@ -343,13 +398,13 @@ export class OpenAIService {
       }
 
       // Send error event
-      res.write(`event: error\n`);
+      res.write('event: error\n');
       res.write(`data: ${JSON.stringify({
         error: 'Stream processing failed',
         message: error.message,
         timestamp: new Date().toISOString()
       })}\n\n`);
-      
+
       res.end();
     }
   }
@@ -364,14 +419,18 @@ export class OpenAIService {
   async generateStreamingVoiceCompletion(messages, res, voiceSettings = {}) {
     try {
       const selectedText = this.extractSelectedText(
-        messages.find(msg => msg.role === 'user')?.content || ''
+        messages.find((msg) => msg.role === 'user')?.content || ''
       );
 
-      // Voice configuration
+      // Voice configuration with enhanced chunking
       const {
         model = 'aura-2-draco-en',
-        chunkSize = 50, // Words per audio chunk
-        bufferAudio = true
+        chunkSize = 30, // Reduced for lower latency
+        minChunkSize = 15, // Minimum words before forcing chunk
+        maxChunkSize = 60, // Maximum to prevent memory issues
+        audioFormat = 'mp3', // Default format
+        sampleRate = 24000, // Higher quality
+        naturalBreaks = true // Enable natural speech breaks
       } = voiceSettings;
 
       // Record API call metric
@@ -395,15 +454,22 @@ export class OpenAIService {
         }
       };
 
-      console.log(`🎤 Starting streaming voice request...`);
+      console.log('🎤 Starting streaming voice request...');
 
-      // Send initial metadata
-      res.write(`event: start\n`);
+      // Send initial metadata with enhanced voice configuration
+      res.write('event: start\n');
       res.write(`data: ${JSON.stringify({
         selectedText,
         model: requestData.model,
         voiceModel: model,
-        chunkSize,
+        voiceSettings: {
+          chunkSize,
+          minChunkSize,
+          maxChunkSize,
+          audioFormat,
+          sampleRate,
+          naturalBreaks
+        },
         timestamp: new Date().toISOString()
       })}\n\n`);
 
@@ -429,15 +495,46 @@ export class OpenAIService {
       let textBuffer = '';
       let totalTokens = 0;
       let chunkIndex = 0;
+      const streamStartTime = Date.now();
+      let firstChunkTime = null;
+      const audioChunkTimes = [];
 
       try {
+        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { done, value } = await reader.read();
-          
+
           if (done) {
             // Process any remaining text in buffer
             if (textBuffer.trim()) {
-              await this.convertTextToSpeech(textBuffer.trim(), res, chunkIndex++, model);
+              if (!firstChunkTime) {
+                firstChunkTime = Date.now();
+              }
+
+              const finalChunkStartTime = Date.now();
+
+              await this.convertTextToSpeech(
+                textBuffer.trim(),
+                res,
+                chunkIndex,
+                model,
+                {
+                  audioFormat,
+                  sampleRate,
+                  estimatedDuration: this.estimateAudioDuration(textBuffer.trim()),
+                  streamingLatency: finalChunkStartTime - streamStartTime
+                }
+              );
+
+              // Record final chunk timing
+              audioChunkTimes.push({
+                chunkIndex,
+                startTime: finalChunkStartTime,
+                processingTime: Date.now() - finalChunkStartTime,
+                wordCount: textBuffer.trim().split(' ').length
+              });
+
+              chunkIndex++;
             }
             break;
           }
@@ -449,14 +546,32 @@ export class OpenAIService {
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
-              
+
               if (data === '[DONE]') {
-                // Send completion event
-                res.write(`event: done\n`);
+                const streamEndTime = Date.now();
+                const totalStreamingTime = streamEndTime - streamStartTime;
+                const avgChunkProcessingTime = audioChunkTimes.length > 0
+                  ? audioChunkTimes.reduce((sum, chunk) => sum + chunk.processingTime, 0) / audioChunkTimes.length
+                  : 0;
+
+                // Send completion event with comprehensive timing data
+                res.write('event: done\n');
                 res.write(`data: ${JSON.stringify({
                   totalTokens,
                   totalChunks: chunkIndex,
                   selectedText,
+                  timing: {
+                    totalStreamingTime,
+                    timeToFirstChunk: firstChunkTime ? firstChunkTime - streamStartTime : null,
+                    averageChunkProcessingTime: Math.round(avgChunkProcessingTime),
+                    totalAudioDuration: audioChunkTimes.reduce((sum, chunk) =>
+                      sum + this.estimateAudioDuration(chunk.wordCount * 5), 0), // Rough estimate
+                    chunkTimings: audioChunkTimes
+                  },
+                  performance: {
+                    wordsPerSecond: totalTokens > 0 ? Math.round((totalTokens * 0.75) / (totalStreamingTime / 1000)) : 0,
+                    chunksPerSecond: chunkIndex > 0 ? Math.round(chunkIndex / (totalStreamingTime / 1000)) : 0
+                  },
                   timestamp: new Date().toISOString()
                 })}\n\n`);
                 res.end();
@@ -465,15 +580,15 @@ export class OpenAIService {
 
               try {
                 const parsed = JSON.parse(data);
-                
+
                 if (parsed.choices && parsed.choices[0]) {
-                  const delta = parsed.choices[0].delta;
-                  
+                  const { delta } = parsed.choices[0];
+
                   if (delta.content) {
                     textBuffer += delta.content;
-                    
+
                     // Send text chunk for real-time display
-                    res.write(`event: text\n`);
+                    res.write('event: text\n');
                     res.write(`data: ${JSON.stringify({
                       content: delta.content,
                       timestamp: new Date().toISOString()
@@ -481,12 +596,61 @@ export class OpenAIService {
 
                     // Check if we have enough text for audio conversion
                     const words = textBuffer.split(' ');
-                    if (words.length >= chunkSize) {
-                      const chunkText = words.slice(0, chunkSize).join(' ');
-                      textBuffer = words.slice(chunkSize).join(' ');
-                      
-                      // Convert to speech asynchronously
-                      await this.convertTextToSpeech(chunkText, res, chunkIndex++, model);
+                    let shouldCreateChunk = false;
+                    let chunkText = '';
+
+                    if (naturalBreaks && words.length >= minChunkSize) {
+                      // Look for natural break points (sentence endings, commas, etc.)
+                      const breakIndex = this.findNaturalBreakPoint(textBuffer, chunkSize);
+                      if (breakIndex > 0) {
+                        chunkText = textBuffer.substring(0, breakIndex).trim();
+                        textBuffer = textBuffer.substring(breakIndex).trim();
+                        shouldCreateChunk = true;
+                      }
+                    }
+
+                    // Fallback to word-count based chunking
+                    if (!shouldCreateChunk) {
+                      if (words.length >= chunkSize ||
+                          (words.length >= maxChunkSize)) {
+                        const actualChunkSize = Math.min(words.length, chunkSize);
+                        chunkText = words.slice(0, actualChunkSize).join(' ');
+                        textBuffer = words.slice(actualChunkSize).join(' ');
+                        shouldCreateChunk = true;
+                      }
+                    }
+
+                    if (shouldCreateChunk && chunkText) {
+                      // Record timing for first chunk
+                      if (!firstChunkTime) {
+                        firstChunkTime = Date.now();
+                      }
+
+                      const chunkStartTime = Date.now();
+
+                      // Convert to speech asynchronously with enhanced metadata
+                      await this.convertTextToSpeech(
+                        chunkText,
+                        res,
+                        chunkIndex,
+                        model,
+                        {
+                          audioFormat,
+                          sampleRate,
+                          estimatedDuration: this.estimateAudioDuration(chunkText),
+                          streamingLatency: chunkStartTime - streamStartTime
+                        }
+                      );
+
+                      // Record chunk processing time
+                      audioChunkTimes.push({
+                        chunkIndex,
+                        startTime: chunkStartTime,
+                        processingTime: Date.now() - chunkStartTime,
+                        wordCount: chunkText.split(' ').length
+                      });
+
+                      chunkIndex++;
                     }
                   }
 
@@ -521,13 +685,13 @@ export class OpenAIService {
       }
 
       // Send error event
-      res.write(`event: error\n`);
+      res.write('event: error\n');
       res.write(`data: ${JSON.stringify({
         error: 'Voice streaming failed',
         message: error.message,
         timestamp: new Date().toISOString()
       })}\n\n`);
-      
+
       res.end();
     }
   }
@@ -538,8 +702,9 @@ export class OpenAIService {
    * @param {Object} res - Response object
    * @param {number} chunkIndex - Audio chunk index
    * @param {string} voiceModel - Deepgram voice model
+   * @param {Object} options - Additional options for TTS
    */
-  async convertTextToSpeech(text, res, chunkIndex, voiceModel) {
+  async convertTextToSpeech(text, res, chunkIndex, voiceModel, options = {}) {
     try {
       const voiceKey = process.env.VOICE_KEY;
       if (!voiceKey) {
@@ -547,9 +712,24 @@ export class OpenAIService {
         return;
       }
 
+      const {
+        audioFormat = 'mp3',
+        sampleRate = 24000,
+        estimatedDuration = 0,
+        streamingLatency = 0
+      } = options;
+
       console.log(`🎵 Converting chunk ${chunkIndex} to speech: "${text.substring(0, 50)}..."`);
 
-      const response = await fetch(`https://api.deepgram.com/v1/speak?model=${voiceModel}`, {
+      // Build Deepgram URL with enhanced parameters
+      const deepgramUrl = new URL('https://api.deepgram.com/v1/speak');
+      deepgramUrl.searchParams.append('model', voiceModel);
+      deepgramUrl.searchParams.append('encoding', audioFormat === 'wav' ? 'linear16' : 'mp3');
+      if (audioFormat === 'wav' && sampleRate) {
+        deepgramUrl.searchParams.append('sample_rate', sampleRate);
+      }
+
+      const response = await fetch(deepgramUrl.toString(), {
         method: 'POST',
         headers: {
           'Authorization': `Token ${voiceKey}`,
@@ -560,6 +740,14 @@ export class OpenAIService {
 
       if (!response.ok) {
         console.warn(`⚠️ Deepgram TTS failed for chunk ${chunkIndex}:`, response.status);
+        // Send error event but continue processing
+        res.write('event: audio-error\n');
+        res.write(`data: ${JSON.stringify({
+          chunkIndex,
+          text,
+          error: `TTS API error: ${response.status}`,
+          timestamp: new Date().toISOString()
+        })}\n\n`);
         return;
       }
 
@@ -567,23 +755,36 @@ export class OpenAIService {
       const audioBuffer = Buffer.from(await response.arrayBuffer());
       const base64Audio = audioBuffer.toString('base64');
 
-      // Send audio chunk
-      res.write(`event: audio\n`);
+      // Determine MIME type based on format
+      const mimeType = audioFormat === 'wav' ? 'audio/wav' : 'audio/mpeg';
+
+      // Send enhanced audio chunk with metadata
+      res.write('event: audio\n');
       res.write(`data: ${JSON.stringify({
         chunkIndex,
         audio: base64Audio,
         text,
-        mimeType: 'audio/mpeg',
-        timestamp: new Date().toISOString()
+        mimeType,
+        audioFormat,
+        sampleRate: audioFormat === 'wav' ? sampleRate : undefined,
+        estimatedDuration,
+        actualSize: audioBuffer.length,
+        streamingLatency,
+        timing: {
+          queuedAt: Date.now(),
+          processingStarted: Date.now() - streamingLatency
+        },
+        timestamp: new Date().toISOString(),
+        wordCount: text.split(' ').length
       })}\n\n`);
 
-      console.log(`✅ Audio chunk ${chunkIndex} sent (${audioBuffer.length} bytes)`);
+      console.log(`✅ Audio chunk ${chunkIndex} sent (${audioBuffer.length} bytes, ~${estimatedDuration}ms)`);
 
     } catch (error) {
       console.error(`❌ TTS conversion failed for chunk ${chunkIndex}:`, error.message);
-      
+
       // Send error for this specific chunk, but continue processing
-      res.write(`event: audio-error\n`);
+      res.write('event: audio-error\n');
       res.write(`data: ${JSON.stringify({
         chunkIndex,
         text,

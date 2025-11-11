@@ -42,7 +42,7 @@ class TextToSpeechService {
 
       // Get audio buffer directly from response
       const audioBuffer = Buffer.from(await response.arrayBuffer());
-      
+
       console.log(`✅ Speech generated successfully (${audioBuffer.length} bytes)`);
 
       return audioBuffer;

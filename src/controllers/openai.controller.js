@@ -1,6 +1,5 @@
 import { openAIService } from '../services/openai.service.js';
 import { ConversationModel } from '../models/conversation.js';
-import { corsMiddleware } from '../middleware/cors.js';
 
 /**
  * OpenAI Proxy Controller
@@ -154,14 +153,14 @@ export class OpenAIController {
 
     } catch (error) {
       console.error('❌ Streaming request error:', error.message);
-      
+
       // Send error event
-      res.write(`event: error\n`);
+      res.write('event: error\n');
       res.write(`data: ${JSON.stringify({
         error: 'Internal server error',
         message: 'Failed to process streaming request'
       })}\n\n`);
-      
+
       res.end();
     }
   }
@@ -198,12 +197,22 @@ export class OpenAIController {
 
       console.log('🎤🌊 Processing streaming voice request...');
 
-      // Set up Server-Sent Events headers for streaming
+      // Set up Server-Sent Events headers for streaming with enhanced error handling
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+      // Handle client disconnect gracefully
+      req.on('close', () => {
+        console.log('🔌 Client disconnected from streaming voice endpoint');
+      });
+
+      req.on('error', (error) => {
+        console.error('🔌 Client connection error:', error.message);
+      });
 
       // Create messages array from prompt and context
       const messages = [
@@ -222,14 +231,34 @@ export class OpenAIController {
 
     } catch (error) {
       console.error('❌ Streaming voice request error:', error.message);
-      
-      // Send error event
-      res.write(`event: error\n`);
+
+      // Ensure headers are set even in error case
+      if (!res.headersSent) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      }
+
+      // Send detailed error event for frontend handling
+      res.write('event: error\n');
       res.write(`data: ${JSON.stringify({
-        error: 'Internal server error',
-        message: 'Failed to process streaming voice request'
+        error: 'Streaming voice request failed',
+        message: error.message,
+        code: error.code || 'UNKNOWN_ERROR',
+        retryable: error.retryable !== false, // Default to retryable
+        timestamp: new Date().toISOString()
       })}\n\n`);
-      
+
+      // Send fallback text-only mode suggestion
+      res.write('event: fallback\n');
+      res.write(`data: ${JSON.stringify({
+        mode: 'text-only',
+        message: 'Voice features unavailable, falling back to text-only mode',
+        endpoint: '/api/stream',
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+
       res.end();
     }
   }

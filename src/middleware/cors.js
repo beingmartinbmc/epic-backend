@@ -2,13 +2,24 @@
  * CORS middleware configuration
  */
 
-// Allowed origins configuration - ONLY your production domain
+// Allowed origins configuration - Include Portfolio app domains
 const ALLOWED_ORIGINS = [
-  'https://beingmartinbmc.github.io', 'https://trisshasantos.github.io'
+  'https://beingmartinbmc.github.io',
+  'https://trisshasantos.github.io',
+  // Portfolio app origins
+  'https://ankitsharma-portfolio.vercel.app',
+  'https://ankitsharma-portfolio.netlify.app',
+  'https://portfolio.ankitsharma.dev'
 ];
 
-// No development origins - security first!
-const DEV_ORIGINS = [];
+// Development origins for local testing
+const DEV_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'http://localhost:8080',
+  'http://127.0.0.1:*'
+];
 
 /**
  * Check if origin is allowed
@@ -44,12 +55,17 @@ export function corsMiddleware(req, res, next) {
   const { origin } = req.headers;
   const isAllowed = isOriginAllowed(origin);
 
-  // Set CORS headers
+  // Set CORS headers with SSE support
   res.setHeader('Access-Control-Allow-Origin', isAllowed ? origin : '');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Cache-Control');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+
+  // Additional headers for SSE streaming
+  res.setHeader('Access-Control-Expose-Headers', 'X-SSE-Support, X-Stream-Type');
+  res.setHeader('X-SSE-Support', 'enabled');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
 
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -80,6 +96,39 @@ export function strictCorsMiddleware(req, res, next) {
   }
 
   corsMiddleware(req, res, next);
+}
+
+/**
+ * SSE-optimized CORS middleware for streaming endpoints
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+export function sseCorsMiddleware(req, res, next) {
+  const { origin } = req.headers;
+  const isAllowed = isOriginAllowed(origin);
+
+  // Set SSE-specific CORS headers
+  res.setHeader('Access-Control-Allow-Origin', isAllowed ? origin : '');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Cache-Control');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Expose-Headers', 'X-SSE-Support, X-Stream-Type, Content-Type');
+
+  // SSE-specific headers
+  res.setHeader('X-SSE-Support', 'enabled');
+  res.setHeader('X-Stream-Type', 'voice-enabled');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  next();
 }
 
 /**

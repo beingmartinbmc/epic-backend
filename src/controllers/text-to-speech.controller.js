@@ -58,7 +58,7 @@ export class TextToSpeechController {
 
     } catch (error) {
       console.error('❌ Text-to-speech error:', error.message);
-      
+
       if (error.message.includes('VOICE_KEY')) {
         return res.status(500).json({
           error: 'Configuration error',
