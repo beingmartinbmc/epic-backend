@@ -353,6 +353,245 @@ export class OpenAIService {
       res.end();
     }
   }
+
+  /**
+   * Generate streaming voice completion (OpenAI + Deepgram TTS)
+   * @param {Array} messages - Array of messages
+   * @param {Object} res - Express response object
+   * @param {Object} voiceSettings - Voice configuration options
+   * @returns {Promise<void>} - Streams voice response to client
+   */
+  async generateStreamingVoiceCompletion(messages, res, voiceSettings = {}) {
+    try {
+      const selectedText = this.extractSelectedText(
+        messages.find(msg => msg.role === 'user')?.content || ''
+      );
+
+      // Voice configuration
+      const {
+        model = 'aura-2-draco-en',
+        chunkSize = 50, // Words per audio chunk
+        bufferAudio = true
+      } = voiceSettings;
+
+      // Record API call metric
+      const apiCallsCounter = getCustomMetric('epic_api_calls_total');
+      if (apiCallsCounter) {
+        apiCallsCounter.inc();
+      }
+
+      // Add diversity instruction
+      const diversifiedMessages = this.addDiversityInstruction(messages);
+
+      // Prepare request data for streaming
+      const requestData = {
+        model: this.model,
+        messages: diversifiedMessages,
+        max_tokens: this.maxTokens,
+        temperature: this.generateRandomizedTemperature(),
+        stream: true,
+        stream_options: {
+          include_usage: true
+        }
+      };
+
+      console.log(`🎤 Starting streaming voice request...`);
+
+      // Send initial metadata
+      res.write(`event: start\n`);
+      res.write(`data: ${JSON.stringify({
+        selectedText,
+        model: requestData.model,
+        voiceModel: model,
+        chunkSize,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+
+      // Make streaming API call to OpenAI
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`OpenAI API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+      }
+
+      // Process streaming response and convert to voice
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let textBuffer = '';
+      let totalTokens = 0;
+      let chunkIndex = 0;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            // Process any remaining text in buffer
+            if (textBuffer.trim()) {
+              await this.convertTextToSpeech(textBuffer.trim(), res, chunkIndex++, model);
+            }
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              
+              if (data === '[DONE]') {
+                // Send completion event
+                res.write(`event: done\n`);
+                res.write(`data: ${JSON.stringify({
+                  totalTokens,
+                  totalChunks: chunkIndex,
+                  selectedText,
+                  timestamp: new Date().toISOString()
+                })}\n\n`);
+                res.end();
+                return;
+              }
+
+              try {
+                const parsed = JSON.parse(data);
+                
+                if (parsed.choices && parsed.choices[0]) {
+                  const delta = parsed.choices[0].delta;
+                  
+                  if (delta.content) {
+                    textBuffer += delta.content;
+                    
+                    // Send text chunk for real-time display
+                    res.write(`event: text\n`);
+                    res.write(`data: ${JSON.stringify({
+                      content: delta.content,
+                      timestamp: new Date().toISOString()
+                    })}\n\n`);
+
+                    // Check if we have enough text for audio conversion
+                    const words = textBuffer.split(' ');
+                    if (words.length >= chunkSize) {
+                      const chunkText = words.slice(0, chunkSize).join(' ');
+                      textBuffer = words.slice(chunkSize).join(' ');
+                      
+                      // Convert to speech asynchronously
+                      await this.convertTextToSpeech(chunkText, res, chunkIndex++, model);
+                    }
+                  }
+
+                  // Track usage if available
+                  if (parsed.usage) {
+                    totalTokens = parsed.usage.total_tokens;
+                  }
+                }
+              } catch (parseError) {
+                console.warn('⚠️ Failed to parse streaming chunk:', parseError.message);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Record success metric
+      const successCounter = getCustomMetric('epic_successful_requests_total');
+      if (successCounter) {
+        successCounter.inc();
+      }
+
+    } catch (error) {
+      console.error('❌ Error in streaming voice completion:', error.message);
+
+      // Record error metric
+      const errorsCounter = getCustomMetric('epic_errors_total');
+      if (errorsCounter) {
+        errorsCounter.inc();
+      }
+
+      // Send error event
+      res.write(`event: error\n`);
+      res.write(`data: ${JSON.stringify({
+        error: 'Voice streaming failed',
+        message: error.message,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+      
+      res.end();
+    }
+  }
+
+  /**
+   * Convert text to speech using Deepgram and stream as base64
+   * @param {string} text - Text to convert
+   * @param {Object} res - Response object
+   * @param {number} chunkIndex - Audio chunk index
+   * @param {string} voiceModel - Deepgram voice model
+   */
+  async convertTextToSpeech(text, res, chunkIndex, voiceModel) {
+    try {
+      const voiceKey = process.env.VOICE_KEY;
+      if (!voiceKey) {
+        console.warn('⚠️ VOICE_KEY not configured, skipping TTS');
+        return;
+      }
+
+      console.log(`🎵 Converting chunk ${chunkIndex} to speech: "${text.substring(0, 50)}..."`);
+
+      const response = await fetch(`https://api.deepgram.com/v1/speak?model=${voiceModel}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${voiceKey}`,
+          'Content-Type': 'text/plain'
+        },
+        body: text
+      });
+
+      if (!response.ok) {
+        console.warn(`⚠️ Deepgram TTS failed for chunk ${chunkIndex}:`, response.status);
+        return;
+      }
+
+      // Get audio buffer and convert to base64
+      const audioBuffer = Buffer.from(await response.arrayBuffer());
+      const base64Audio = audioBuffer.toString('base64');
+
+      // Send audio chunk
+      res.write(`event: audio\n`);
+      res.write(`data: ${JSON.stringify({
+        chunkIndex,
+        audio: base64Audio,
+        text,
+        mimeType: 'audio/mpeg',
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+
+      console.log(`✅ Audio chunk ${chunkIndex} sent (${audioBuffer.length} bytes)`);
+
+    } catch (error) {
+      console.error(`❌ TTS conversion failed for chunk ${chunkIndex}:`, error.message);
+      
+      // Send error for this specific chunk, but continue processing
+      res.write(`event: audio-error\n`);
+      res.write(`data: ${JSON.stringify({
+        chunkIndex,
+        text,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+    }
+  }
 }
 
 // Export singleton instance

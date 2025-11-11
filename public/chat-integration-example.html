@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Voice Integration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        .chat-header {
+            background: #007bff;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .voice-toggle {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .voice-toggle.enabled {
+            background: #28a745;
+            border-color: #28a745;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.bot {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            position: relative;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-bubble {
+            background: #007bff;
+            color: white;
+            margin-left: 10px;
+        }
+
+        .message.bot .message-bubble {
+            background: white;
+            color: #333;
+            border: 1px solid #e1e4e8;
+            margin-right: 10px;
+        }
+
+        .message.bot.streaming .message-bubble {
+            border-color: #007bff;
+            background: #f8f9fa;
+        }
+
+        .typing-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #007bff;
+            animation: typing 1.5s infinite;
+            margin-right: 2px;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { opacity: 0.3; }
+            30% { opacity: 1; }
+        }
+
+        .voice-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .voice-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .voice-button:hover {
+            background: #218838;
+        }
+
+        .voice-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .audio-progress {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            border-top: 1px solid #e1e4e8;
+            background: white;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            border: 1px solid #e1e4e8;
+            border-radius: 20px;
+            padding: 12px 16px;
+            font-size: 14px;
+            outline: none;
+            resize: none;
+            max-height: 100px;
+            min-height: 40px;
+        }
+
+        .chat-input:focus {
+            border-color: #007bff;
+        }
+
+        .send-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .send-button:hover {
+            background: #0056b3;
+        }
+
+        .send-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .status-bar {
+            padding: 5px 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #e1e4e8;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>🤖 AI Assistant</span>
+            <button class="voice-toggle" id="voiceToggle" onclick="toggleVoice()">
+                🔊 Voice: OFF
+            </button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+                <div class="message-bubble">
+                    Hello! I'm your AI assistant. Ask me anything, and I can respond with both text and voice!
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar" id="statusBar">Ready</div>
+
+        <div class="chat-input-container">
+            <div class="chat-input-wrapper">
+                <textarea 
+                    id="chatInput" 
+                    class="chat-input" 
+                    placeholder="Type your message here..."
+                    rows="1"
+                    onkeydown="handleKeyDown(event)"
+                ></textarea>
+                <button id="sendButton" class="send-button" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isVoiceEnabled = false;
+        let isStreaming = false;
+        let currentStream = null;
+        let audioQueue = [];
+        let isPlayingAudio = false;
+        let currentMessageId = 0;
+
+        const API_BASE = 'https://epic-backend-82b9dbzwq-beingmartinbmcs-projects.vercel.app';
+
+        function toggleVoice() {
+            isVoiceEnabled = !isVoiceEnabled;
+            const toggle = document.getElementById('voiceToggle');
+            toggle.textContent = `🔊 Voice: ${isVoiceEnabled ? 'ON' : 'OFF'}`;
+            toggle.classList.toggle('enabled', isVoiceEnabled);
+            updateStatus(`Voice ${isVoiceEnabled ? 'enabled' : 'disabled'}`);
+        }
+
+        function updateStatus(message) {
+            document.getElementById('statusBar').textContent = message;
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px';
+        }
+
+        document.getElementById('chatInput').addEventListener('input', function() {
+            autoResize(this);
+        });
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message || isStreaming) return;
+
+            // Add user message to chat
+            addMessage('user', message);
+            
+            // Clear input
+            input.value = '';
+            autoResize(input);
+            
+            // Send to API
+            if (isVoiceEnabled) {
+                sendStreamingVoiceRequest(message);
+            } else {
+                sendStreamingTextRequest(message);
+            }
+        }
+
+        function addMessage(sender, content, messageId = null) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            if (messageId) messageDiv.id = `message-${messageId}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            bubbleDiv.textContent = content;
+            
+            messageDiv.appendChild(bubbleDiv);
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            return messageDiv;
+        }
+
+        function addStreamingMessage() {
+            const messageId = ++currentMessageId;
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot streaming';
+            messageDiv.id = `message-${messageId}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            bubbleDiv.innerHTML = '<span class="typing-indicator"></span><span class="typing-indicator"></span><span class="typing-indicator"></span>';
+            
+            messageDiv.appendChild(bubbleDiv);
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            return { messageDiv, bubbleDiv, messageId };
+        }
+
+        async function sendStreamingTextRequest(message) {
+            const { messageDiv, bubbleDiv, messageId } = addStreamingMessage();
+            isStreaming = true;
+            updateSendButton();
+            updateStatus('Generating response...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/stream`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: message,
+                        context: "You are a helpful AI assistant. Provide clear, concise, and engaging responses."
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let fullText = '';
+                let eventType = '';
+
+                bubbleDiv.textContent = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) {
+                            eventType = line.slice(7);
+                        } else if (line.startsWith('data: ') && eventType === 'chunk') {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                fullText += data.content;
+                                bubbleDiv.textContent = fullText;
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            } catch (e) {
+                                console.warn('Parse error:', e);
+                            }
+                        }
+                    }
+                }
+
+                messageDiv.classList.remove('streaming');
+                updateStatus('Response completed');
+
+            } catch (error) {
+                console.error('Streaming error:', error);
+                bubbleDiv.textContent = 'Sorry, there was an error processing your request.';
+                messageDiv.classList.remove('streaming');
+                updateStatus('Error occurred');
+            } finally {
+                isStreaming = false;
+                updateSendButton();
+            }
+        }
+
+        async function sendStreamingVoiceRequest(message) {
+            const { messageDiv, bubbleDiv, messageId } = addStreamingMessage();
+            isStreaming = true;
+            updateSendButton();
+            updateStatus('Generating voice response...');
+            
+            // Add voice controls
+            const voiceControls = document.createElement('div');
+            voiceControls.className = 'voice-controls';
+            voiceControls.innerHTML = `
+                <button class="voice-button" onclick="playAudio(${messageId})" id="playBtn-${messageId}">
+                    ▶️ Play
+                </button>
+                <span class="audio-progress" id="progress-${messageId}">Preparing audio...</span>
+            `;
+            
+            const audioChunks = [];
+            let fullText = '';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/stream-voice`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: message,
+                        context: "You are a helpful AI assistant. Provide clear, engaging responses.",
+                        voiceSettings: {
+                            model: "aura-2-draco-en",
+                            chunkSize: 25,
+                            bufferAudio: true
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let eventType = '';
+
+                bubbleDiv.textContent = '';
+                bubbleDiv.appendChild(voiceControls);
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) {
+                            eventType = line.slice(7);
+                        } else if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (eventType === 'text') {
+                                    fullText += data.content;
+                                    const textNode = bubbleDiv.firstChild || document.createTextNode('');
+                                    textNode.textContent = fullText;
+                                    if (!bubbleDiv.firstChild) {
+                                        bubbleDiv.insertBefore(textNode, voiceControls);
+                                    }
+                                } else if (eventType === 'audio') {
+                                    audioChunks.push(data);
+                                    document.getElementById(`progress-${messageId}`).textContent = 
+                                        `Audio chunks: ${audioChunks.length}`;
+                                } else if (eventType === 'done') {
+                                    document.getElementById(`progress-${messageId}`).textContent = 
+                                        `Ready to play (${audioChunks.length} chunks)`;
+                                    document.getElementById(`playBtn-${messageId}`).disabled = false;
+                                }
+                                
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            } catch (e) {
+                                console.warn('Parse error:', e);
+                            }
+                        }
+                    }
+                }
+
+                // Store audio chunks for playback
+                window[`audioData-${messageId}`] = audioChunks;
+                
+                messageDiv.classList.remove('streaming');
+                updateStatus('Voice response completed');
+
+            } catch (error) {
+                console.error('Streaming voice error:', error);
+                const textNode = document.createTextNode('Sorry, there was an error processing your request.');
+                bubbleDiv.insertBefore(textNode, voiceControls);
+                messageDiv.classList.remove('streaming');
+                updateStatus('Error occurred');
+            } finally {
+                isStreaming = false;
+                updateSendButton();
+            }
+        }
+
+        function playAudio(messageId) {
+            const audioChunks = window[`audioData-${messageId}`];
+            if (!audioChunks || audioChunks.length === 0) return;
+
+            const playBtn = document.getElementById(`playBtn-${messageId}`);
+            const progress = document.getElementById(`progress-${messageId}`);
+            
+            playBtn.disabled = true;
+            playBtn.textContent = '⏸️ Playing...';
+            
+            let chunkIndex = 0;
+            
+            function playNextChunk() {
+                if (chunkIndex >= audioChunks.length) {
+                    playBtn.disabled = false;
+                    playBtn.textContent = '▶️ Play';
+                    progress.textContent = 'Playback completed';
+                    return;
+                }
+                
+                const chunk = audioChunks[chunkIndex];
+                progress.textContent = `Playing ${chunkIndex + 1}/${audioChunks.length}`;
+                
+                try {
+                    const audioBlob = base64ToBlob(chunk.audio, 'audio/mpeg');
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    
+                    audio.onended = () => {
+                        URL.revokeObjectURL(audioUrl);
+                        chunkIndex++;
+                        setTimeout(playNextChunk, 100);
+                    };
+                    
+                    audio.onerror = () => {
+                        console.error('Audio playback error for chunk', chunkIndex);
+                        chunkIndex++;
+                        setTimeout(playNextChunk, 100);
+                    };
+                    
+                    audio.play();
+                } catch (error) {
+                    console.error('Audio conversion error:', error);
+                    chunkIndex++;
+                    setTimeout(playNextChunk, 100);
+                }
+            }
+            
+            playNextChunk();
+        }
+
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+
+        function updateSendButton() {
+            const button = document.getElementById('sendButton');
+            button.disabled = isStreaming;
+            button.textContent = isStreaming ? 'Sending...' : 'Send';
+        }
+
+        // Auto-focus input on load
+        window.addEventListener('load', () => {
+            document.getElementById('chatInput').focus();
+        });
+    </script>
+</body>
+</html>
