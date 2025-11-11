@@ -42,30 +42,93 @@ class VoiceStreamClient {
   }
 
   async startVoiceChat(prompt, context = "You are a helpful 3D model assistant.") {
-    const eventSource = new EventSource(this.backendUrl + '/api/stream-voice');
-    
-    // Send the request
-    fetch(this.backendUrl + '/api/stream-voice', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        prompt,
-        context,
-        voiceSettings: this.options
-      })
-    });
+    // Create POST request that returns SSE stream
+    try {
+      const response = await fetch(this.backendUrl + '/api/stream-voice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache'
+        },
+        body: JSON.stringify({
+          prompt,
+          context,
+          voiceSettings: this.options
+        })
+      });
 
-    // Handle events
-    eventSource.addEventListener('start', this.handleStart.bind(this));
-    eventSource.addEventListener('text', this.handleText.bind(this));
-    eventSource.addEventListener('audio', this.handleAudio.bind(this));
-    eventSource.addEventListener('done', this.handleComplete.bind(this));
-    eventSource.addEventListener('error', this.handleError.bind(this));
-    eventSource.addEventListener('fallback', this.handleFallback.bind(this));
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-    return eventSource;
+      // Read the SSE stream manually
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const processStream = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.startsWith('event: ')) {
+                const eventType = line.slice(7);
+                const dataLine = lines[lines.indexOf(line) + 1];
+                if (dataLine && dataLine.startsWith('data: ')) {
+                  const eventData = dataLine.slice(6);
+                  this.handleSSEEvent(eventType, eventData);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Stream reading error:', error);
+        }
+      };
+
+      processStream();
+      return { reader, close: () => reader.cancel() };
+
+    } catch (error) {
+      console.error('Failed to start voice chat:', error);
+      throw error;
+    }
+  }
+
+  handleSSEEvent(eventType, data) {
+    try {
+      const parsedData = JSON.parse(data);
+      
+      switch (eventType) {
+        case 'start':
+          this.handleStart({ data });
+          break;
+        case 'text':
+          this.handleText({ data });
+          break;
+        case 'audio':
+          this.handleAudio({ data });
+          break;
+        case 'done':
+          this.handleComplete({ data });
+          break;
+        case 'error':
+          this.handleError({ data });
+          break;
+        case 'fallback':
+          this.handleFallback({ data });
+          break;
+      }
+    } catch (error) {
+      console.error('Error parsing SSE event:', error);
+    }
   }
 
   handleStart(event) {
@@ -122,6 +185,93 @@ class VoiceStreamClient {
     // Switch to text-only endpoint
     this.switchToTextOnlyMode(data.endpoint);
   }
+}
+```
+
+// Alternative: Using a custom EventSource-like helper
+class SSEPostClient {
+  static async connect(url, postData) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify(postData)
+    });
+
+    if (!response.ok) {
+      throw new Error(`SSE connection failed: ${response.status}`);
+    }
+
+    const eventTarget = new EventTarget();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    const processStream = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          let eventType = 'message';
+          let eventData = '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7);
+            } else if (line.startsWith('data: ')) {
+              eventData = line.slice(6);
+              
+              // Dispatch the event
+              const event = new CustomEvent(eventType, {
+                detail: { data: eventData }
+              });
+              eventTarget.dispatchEvent(event);
+            }
+          }
+        }
+      } catch (error) {
+        const errorEvent = new CustomEvent('error', {
+          detail: { error }
+        });
+        eventTarget.dispatchEvent(errorEvent);
+      }
+    };
+
+    processStream();
+
+    // Return EventSource-like interface
+    return {
+      addEventListener: (type, listener) => {
+        eventTarget.addEventListener(type, (e) => {
+          listener({ data: e.detail.data });
+        });
+      },
+      close: () => reader.cancel()
+    };
+  }
+}
+
+// Usage with the helper
+async startVoiceChatSimple(prompt, context) {
+  const sseClient = await SSEPostClient.connect(
+    this.backendUrl + '/api/stream-voice',
+    { prompt, context, voiceSettings: this.options }
+  );
+
+  sseClient.addEventListener('start', this.handleStart.bind(this));
+  sseClient.addEventListener('text', this.handleText.bind(this));
+  sseClient.addEventListener('audio', this.handleAudio.bind(this));
+  sseClient.addEventListener('done', this.handleComplete.bind(this));
+  sseClient.addEventListener('error', this.handleError.bind(this));
+
+  return sseClient;
 }
 ```
 
@@ -218,15 +368,15 @@ class Portfolio3DChatInterface {
       // Show user message
       this.displayMessage('user', userMessage);
       
-      // Start voice streaming
-      const eventSource = await this.voiceClient.startVoiceChat(
+      // Start voice streaming with correct POST + SSE pattern
+      const streamConnection = await this.voiceClient.startVoiceChat(
         userMessage,
         "You are an AI assistant embedded in a 3D portfolio. Be helpful and engaging while discussing my work and skills."
       );
       
-      // Handle cleanup
+      // Handle cleanup after timeout
       setTimeout(() => {
-        eventSource.close();
+        streamConnection.close();
       }, 30000); // 30-second timeout
       
     } catch (error) {

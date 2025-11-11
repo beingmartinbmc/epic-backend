@@ -73,6 +73,29 @@ export class OpenAIService {
   }
 
   /**
+   * Clean text for speech synthesis by removing markdown and emojis
+   * @param {string} text - Text to clean
+   * @returns {string} - Cleaned text suitable for TTS
+   */
+  cleanTextForSpeech(text) {
+    return text
+      .replace(/\*\*\*(.*?)\*\*\*/g, '$1') // Remove bold italic ***text***
+      .replace(/\*\*(.*?)\*\*/g, '$1')     // Remove bold **text**
+      .replace(/\*(.*?)\*/g, '$1')         // Remove italic *text*
+      .replace(/__(.*?)__/g, '$1')         // Remove bold __text__
+      .replace(/_(.*?)_/g, '$1')           // Remove italic _text_
+      .replace(/`(.*?)`/g, '$1')           // Remove inline code `text`
+      .replace(/```[\s\S]*?```/g, '')      // Remove code blocks
+      .replace(/#{1,6}\s*/g, '')           // Remove headers
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links, keep text
+      .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1') // Remove images, keep alt text
+      .replace(/[#*`_~\[\]()]/g, '')       // Remove remaining markdown chars
+      .replace(/[👋😅🤖💡🔊🔇⏹️⏳🎯✅❌🔄🌊🎤🎵]/g, '') // Remove emojis
+      .replace(/\s+/g, ' ')                // Normalize whitespace
+      .trim();
+  }
+
+  /**
    * Extract selected text option from user message
    * @param {string} userMessage - User's message
    * @returns {string} - Selected text option
@@ -512,26 +535,34 @@ export class OpenAIService {
               }
 
               const finalChunkStartTime = Date.now();
+              const finalText = textBuffer.trim();
+              const cleanedFinalText = this.cleanTextForSpeech(finalText);
 
-              await this.convertTextToSpeech(
-                textBuffer.trim(),
-                res,
-                chunkIndex,
-                model,
-                {
-                  audioFormat,
-                  sampleRate,
-                  estimatedDuration: this.estimateAudioDuration(textBuffer.trim()),
-                  streamingLatency: finalChunkStartTime - streamStartTime
-                }
-              );
+              // Only process TTS if cleaned text has meaningful content
+              if (cleanedFinalText.trim().length > 3) {
+                await this.convertTextToSpeech(
+                  cleanedFinalText,  // Send cleaned text to TTS
+                  finalText,         // Send original text to client
+                  res,
+                  chunkIndex,
+                  model,
+                  {
+                    audioFormat,
+                    sampleRate,
+                    estimatedDuration: this.estimateAudioDuration(cleanedFinalText),
+                    streamingLatency: finalChunkStartTime - streamStartTime
+                  }
+                );
+              } else {
+                console.log(`⏭️ Skipping final TTS chunk (cleaned text too short): "${cleanedFinalText}"`);
+              }
 
               // Record final chunk timing
               audioChunkTimes.push({
                 chunkIndex,
                 startTime: finalChunkStartTime,
                 processingTime: Date.now() - finalChunkStartTime,
-                wordCount: textBuffer.trim().split(' ').length
+                wordCount: finalText.split(' ').length
               });
 
               chunkIndex++;
@@ -628,19 +659,28 @@ export class OpenAIService {
 
                       const chunkStartTime = Date.now();
 
-                      // Convert to speech asynchronously with enhanced metadata
-                      await this.convertTextToSpeech(
-                        chunkText,
-                        res,
-                        chunkIndex,
-                        model,
-                        {
-                          audioFormat,
-                          sampleRate,
-                          estimatedDuration: this.estimateAudioDuration(chunkText),
-                          streamingLatency: chunkStartTime - streamStartTime
-                        }
-                      );
+                      // Clean text for TTS while preserving original for client
+                      const cleanedTextForTTS = this.cleanTextForSpeech(chunkText);
+                      
+                      // Skip TTS if cleaned text is empty or too short
+                      if (cleanedTextForTTS.trim().length > 3) {
+                        // Convert to speech asynchronously with enhanced metadata
+                        await this.convertTextToSpeech(
+                          cleanedTextForTTS,  // Send cleaned text to TTS
+                          chunkText,          // Send original text to client
+                          res,
+                          chunkIndex,
+                          model,
+                          {
+                            audioFormat,
+                            sampleRate,
+                            estimatedDuration: this.estimateAudioDuration(cleanedTextForTTS),
+                            streamingLatency: chunkStartTime - streamStartTime
+                          }
+                        );
+                      } else {
+                        console.log(`⏭️ Skipping TTS for chunk ${chunkIndex} (cleaned text too short): "${cleanedTextForTTS}"`);
+                      }
 
                       // Record chunk processing time
                       audioChunkTimes.push({
@@ -698,13 +738,14 @@ export class OpenAIService {
 
   /**
    * Convert text to speech using Deepgram and stream as base64
-   * @param {string} text - Text to convert
+   * @param {string} cleanedText - Cleaned text for TTS (without markdown/emojis)
+   * @param {string} originalText - Original text for client display (with markdown)
    * @param {Object} res - Response object
    * @param {number} chunkIndex - Audio chunk index
    * @param {string} voiceModel - Deepgram voice model
    * @param {Object} options - Additional options for TTS
    */
-  async convertTextToSpeech(text, res, chunkIndex, voiceModel, options = {}) {
+  async convertTextToSpeech(cleanedText, originalText, res, chunkIndex, voiceModel, options = {}) {
     try {
       const voiceKey = process.env.VOICE_KEY;
       if (!voiceKey) {
@@ -719,7 +760,9 @@ export class OpenAIService {
         streamingLatency = 0
       } = options;
 
-      console.log(`🎵 Converting chunk ${chunkIndex} to speech: "${text.substring(0, 50)}..."`);
+      console.log(`🎵 Converting chunk ${chunkIndex} to speech:`);
+      console.log(`   Original: "${originalText.substring(0, 50)}..."`);
+      console.log(`   Cleaned:  "${cleanedText.substring(0, 50)}..."`);
 
       // Build Deepgram URL with enhanced parameters
       const deepgramUrl = new URL('https://api.deepgram.com/v1/speak');
@@ -729,13 +772,14 @@ export class OpenAIService {
         deepgramUrl.searchParams.append('sample_rate', sampleRate);
       }
 
+      // Send CLEANED text to Deepgram (no markdown/emojis)
       const response = await fetch(deepgramUrl.toString(), {
         method: 'POST',
         headers: {
           'Authorization': `Token ${voiceKey}`,
           'Content-Type': 'text/plain'
         },
-        body: text
+        body: cleanedText  // ← Use cleaned text for TTS
       });
 
       if (!response.ok) {
@@ -744,7 +788,8 @@ export class OpenAIService {
         res.write('event: audio-error\n');
         res.write(`data: ${JSON.stringify({
           chunkIndex,
-          text,
+          text: originalText,  // Send original text to client
+          cleanedText,         // Include cleaned text for debugging
           error: `TTS API error: ${response.status}`,
           timestamp: new Date().toISOString()
         })}\n\n`);
@@ -763,7 +808,7 @@ export class OpenAIService {
       res.write(`data: ${JSON.stringify({
         chunkIndex,
         audio: base64Audio,
-        text,
+        text: originalText,  // Send ORIGINAL text to client (with markdown)
         mimeType,
         audioFormat,
         sampleRate: audioFormat === 'wav' ? sampleRate : undefined,
@@ -775,10 +820,12 @@ export class OpenAIService {
           processingStarted: Date.now() - streamingLatency
         },
         timestamp: new Date().toISOString(),
-        wordCount: text.split(' ').length
+        wordCount: originalText.split(' ').length,
+        cleanedWordCount: cleanedText.split(' ').length  // Show how much was cleaned
       })}\n\n`);
 
       console.log(`✅ Audio chunk ${chunkIndex} sent (${audioBuffer.length} bytes, ~${estimatedDuration}ms)`);
+      console.log(`   Word count: ${originalText.split(' ').length} → ${cleanedText.split(' ').length} (cleaned)`);
 
     } catch (error) {
       console.error(`❌ TTS conversion failed for chunk ${chunkIndex}:`, error.message);
@@ -787,7 +834,8 @@ export class OpenAIService {
       res.write('event: audio-error\n');
       res.write(`data: ${JSON.stringify({
         chunkIndex,
-        text,
+        text: originalText,  // Send original text to client
+        cleanedText,         // Include cleaned text for debugging
         error: error.message,
         timestamp: new Date().toISOString()
       })}\n\n`);
