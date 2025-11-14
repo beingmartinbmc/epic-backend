@@ -5,7 +5,7 @@
 // Allowed origins configuration - Include Portfolio app domains
 const ALLOWED_ORIGINS = [
   'https://beingmartinbmc.github.io',
-  'https://trisshasantos.github.io',
+  'https://trisshasantos.github.io', 'https://beingabu.github.io/',
   // Portfolio app origins
   'https://ankitsharma-portfolio.vercel.app',
   'https://ankitsharma-portfolio.netlify.app',
