@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import { initializeActuator, shutdownActuator } from './config/actuator.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { OpenAIController } from './controllers/openai.controller.js';
+import { EventController } from './controllers/event.controller.js';
+import { CommentController } from './controllers/comment.controller.js';
 
 // Load environment variables
 dotenv.config();
@@ -54,6 +56,23 @@ app.post('/api/generic', OpenAIController.handleGenericRequest);
 app.get('/api/stats', OpenAIController.getStats);
 app.get('/api/conversations', OpenAIController.getConversations);
 
+// Event routes (CRUD)
+app.get('/api/events/upcoming', EventController.getUpcoming);
+app.get('/api/events/range', EventController.getByDateRange);
+app.get('/api/events', EventController.getAll);
+app.get('/api/events/:id', EventController.getById);
+app.post('/api/events', EventController.create);
+app.put('/api/events/:id', EventController.update);
+app.delete('/api/events/:id', EventController.delete);
+
+// Comment routes (CRUD)
+app.get('/api/events/:eventId/comments', CommentController.getByEventId);
+app.get('/api/comments', CommentController.getAll);
+app.get('/api/comments/:id', CommentController.getById);
+app.post('/api/comments', CommentController.create);
+app.put('/api/comments/:id', CommentController.update);
+app.delete('/api/comments/:id', CommentController.delete);
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
@@ -65,6 +84,8 @@ app.get('/', (req, res) => {
       openai: '/api/openai-proxy',
       stats: '/api/stats',
       conversations: '/api/conversations',
+      events: '/api/events',
+      comments: '/api/comments',
       actuator: '/actuator'
     },
     documentation: 'See README.md for API documentation'
@@ -81,7 +102,18 @@ app.use('*', (req, res) => {
       'GET /health',
       'POST /api/openai-proxy',
       'GET /api/stats',
-      'GET /api/conversations'
+      'GET /api/conversations',
+      'GET /api/events',
+      'POST /api/events',
+      'GET /api/events/:id',
+      'PUT /api/events/:id',
+      'DELETE /api/events/:id',
+      'GET /api/comments',
+      'POST /api/comments',
+      'GET /api/comments/:id',
+      'PUT /api/comments/:id',
+      'DELETE /api/comments/:id',
+      'GET /api/events/:eventId/comments'
     ]
   });
 });
